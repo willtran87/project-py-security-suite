@@ -201,7 +201,7 @@ def _preflight_zip_directory(handle: BinaryIO, size: int) -> int:
         raise BenchmarkInputError("benchmark ZIP central directory is too large")
     if directory_offset + directory_size > size - 22:
         raise BenchmarkInputError("benchmark ZIP central directory is out of bounds")
-    return total_entries
+    return int(total_entries)
 
 
 def _validate_archive_bounds(entries: int, expanded: int, compressed: int) -> None:

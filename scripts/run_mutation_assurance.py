@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import argparse
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -49,18 +51,89 @@ def preload_fork_sensitive_crypto_runtime() -> None:
         raise RuntimeError("cryptography X.509 preload self-check failed")
 
 
+def select_mutation_shard(
+    candidates: Sequence[str],
+    *,
+    shard_index: int,
+    shard_count: int,
+    weights: Mapping[str, int] | None = None,
+) -> list[str]:
+    """Return one deterministic, workload-balanced mutation partition."""
+
+    if shard_count < 1:
+        raise ValueError("mutation shard count must be positive")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError("mutation shard index must be within the shard count")
+    ordered = sorted(dict.fromkeys(candidates))
+    if not ordered:
+        raise ValueError("mutation assurance has no configured source modules")
+    normalized_weights: dict[str, int] = {}
+    for candidate in ordered:
+        weight = 1 if weights is None else weights.get(candidate, 1)
+        if isinstance(weight, bool) or not isinstance(weight, int) or weight < 1:
+            raise ValueError("mutation shard weights must be positive integers")
+        normalized_weights[candidate] = weight
+
+    # Largest-processing-time-first scheduling gives deterministic, disjoint
+    # shards while avoiding the severe skew caused by round-robin module count.
+    # Source bytes are a stable proxy for Mutmut's generated mutant workload.
+    shards: list[list[str]] = [[] for _ in range(shard_count)]
+    shard_weights = [0] * shard_count
+    for candidate in sorted(
+        ordered, key=lambda item: (-normalized_weights[item], item)
+    ):
+        destination = min(
+            range(shard_count), key=lambda index: (shard_weights[index], index)
+        )
+        shards[destination].append(candidate)
+        shard_weights[destination] += normalized_weights[candidate]
+    selected = sorted(shards[shard_index])
+    if not selected:
+        raise ValueError("mutation shard is empty; reduce the shard count")
+    return selected
+
+
+def mutation_workload_weights(candidates: Sequence[str]) -> dict[str, int]:
+    """Estimate Mutmut work from stable source sizes, including empty files."""
+
+    return {
+        candidate: max(1, Path(candidate).stat().st_size) for candidate in candidates
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run Mutmut after initializing fork-sensitive native dependencies."""
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--shard-index", type=int)
+    parser.add_argument("--shard-count", type=int)
+    options, mutmut_arguments = parser.parse_known_args(argv)
+    if (options.shard_index is None) != (options.shard_count is None):
+        parser.error("--shard-index and --shard-count must be supplied together")
 
     preload_fork_sensitive_crypto_runtime()
 
     # Importing Mutmut is intentionally delayed: its module selects the fork
     # multiprocessing context at import time and exits on unsupported hosts.
     from mutmut.__main__ import cli
+    from mutmut.configuration import Config
 
-    arguments = list(argv) if argv is not None else None
+    if options.shard_index is not None and options.shard_count is not None:
+        config = Config.get()
+        weights = mutation_workload_weights(config.only_mutate)
+        config.only_mutate = select_mutation_shard(
+            config.only_mutate,
+            shard_index=options.shard_index,
+            shard_count=options.shard_count,
+            weights=weights,
+        )
+        print(
+            f"Mutation shard {options.shard_index + 1}/{options.shard_count}: "
+            f"{len(config.only_mutate)} modules"
+        )
+
     cli(
-        args=["run", *(arguments or [])],
+        args=["run", *mutmut_arguments],
         prog_name="pysec-mutation-assurance",
         standalone_mode=True,
     )

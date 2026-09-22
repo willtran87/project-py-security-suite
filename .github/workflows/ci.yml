@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      require_detection_accuracy:
+        description: Enforce the project accuracy targets in addition to regression checks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,6 +19,125 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  product-acceptance:
+    name: Installed product acceptance / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+      - name: Build and install wheel with locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked --python 3.13
+          uv sync --locked --project containers/scanner --python 3.13
+          uv build --wheel --no-sources --out-dir .artifacts/acceptance-dist
+          uv export --frozen --no-dev --no-emit-project --output-file .artifacts/acceptance-requirements.txt
+          uv venv "$RUNNER_TEMP/acceptance" --python 3.13
+          if [ "$RUNNER_OS" = Windows ]; then
+            PYTHON="$RUNNER_TEMP/acceptance/Scripts/python.exe"
+            SCANNERS="$PWD/containers/scanner/.venv/Scripts"
+            EXE=".exe"
+          else
+            PYTHON="$RUNNER_TEMP/acceptance/bin/python"
+            SCANNERS="$PWD/containers/scanner/.venv/bin"
+            EXE=""
+          fi
+          uv pip install --python "$PYTHON" --require-hashes -r .artifacts/acceptance-requirements.txt
+          uv pip install --python "$PYTHON" --no-deps .artifacts/acceptance-dist/*.whl
+          uv run --frozen python scripts/validate_product_acceptance.py \
+            --python "$PYTHON" --bandit "$SCANNERS/bandit$EXE" --semgrep "$SCANNERS/semgrep$EXE" \
+            --output .artifacts/acceptance/product.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: product-acceptance-${{ matrix.os }}
+          path: .artifacts/acceptance
+          if-no-files-found: error
+
+  external-benchmark:
+    name: Pinned external Python detection benchmark
+    uses: ./.github/workflows/detection-accuracy.yml
+    with:
+      require_accuracy: ${{ inputs.require_detection_accuracy || false }}
+    permissions:
+      contents: read
+
+  detection-regressions:
+    name: Real security detection regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+      - name: Install locked suite and scanner dependencies
+        run: |
+          uv sync --locked --all-groups --python "3.13"
+          uv sync --locked --project containers/scanner --python "3.13"
+      - name: Check Semgrep detection and Bandit coverage errors
+        run: >-
+          uv run --frozen python scripts/validate_detection.py
+          --semgrep "$PWD/containers/scanner/.venv/bin/semgrep"
+          --bandit "$PWD/containers/scanner/.venv/bin/bandit"
+          --output .artifacts/detection/semgrep.json
+      - name: Prepare verified CodeQL CLI and locked query dependencies
+        env:
+          CODEQL_SHA256: d372d54345e058fe6f7ff8074acd155522fff6770b8d72ee1371ea89deafa193 # pragma: allowlist secret
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            --output "$RUNNER_TEMP/codeql.zip" \
+            https://github.com/github/codeql-cli-binaries/releases/download/v2.26.4/codeql-linux64.zip
+          printf '%s  %s\n' "$CODEQL_SHA256" "$RUNNER_TEMP/codeql.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/codeql.zip" -d "$RUNNER_TEMP/codeql-cli"
+          "$RUNNER_TEMP/codeql-cli/codeql/codeql" pack ci src/py_security_suite/rules/codeql
+          "$RUNNER_TEMP/codeql-cli/codeql/codeql" pack download codeql/python-queries@1.8.7
+      - name: Check CodeQL credential flows and native injection precision
+        run: >-
+          uv run --frozen python scripts/validate_detection.py --codeql-only
+          --codeql "$RUNNER_TEMP/codeql-cli/codeql/codeql"
+          --output .artifacts/detection/codeql.json
+      - name: Exercise the installed product with both CodeQL stages
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codeql-home/.codeql"
+          cp -R "$HOME/.codeql/packages" "$RUNNER_TEMP/codeql-home/.codeql/packages"
+          uv build --wheel --no-sources --out-dir .artifacts/codeql-acceptance-dist
+          uv export --frozen --no-dev --no-emit-project --output-file .artifacts/codeql-acceptance-requirements.txt
+          uv venv "$RUNNER_TEMP/codeql-acceptance" --python 3.13
+          uv pip install --python "$RUNNER_TEMP/codeql-acceptance/bin/python" --require-hashes -r .artifacts/codeql-acceptance-requirements.txt
+          uv pip install --python "$RUNNER_TEMP/codeql-acceptance/bin/python" --no-deps .artifacts/codeql-acceptance-dist/*.whl
+          uv run --frozen python scripts/validate_product_acceptance.py \
+            --python "$RUNNER_TEMP/codeql-acceptance/bin/python" \
+            --bandit "$PWD/containers/scanner/.venv/bin/bandit" \
+            --semgrep "$PWD/containers/scanner/.venv/bin/semgrep" \
+            --codeql "$RUNNER_TEMP/codeql-cli/codeql/codeql" \
+            --codeql-runner "$PWD/containers/scanner/.venv/bin/run-codeql" \
+            --codeql-home "$RUNNER_TEMP/codeql-home" \
+            --output .artifacts/detection/installed-codeql.json
+      - name: Retain per-CWE detection evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: detection-regressions
+          path: .artifacts/detection
+          if-no-files-found: error
+
   oci-containment-integration:
     name: Real OCI containment / ${{ matrix.runtime }}
     runs-on: ubuntu-latest
@@ -112,7 +236,7 @@ jobs:
         run: uv sync --project companion --locked --all-groups --python "3.13"
       - name: Start TLS and SCRAM protected PostgreSQL
         shell: bash
-        run: |
+        run: | # pragma: allowlist secret -- keys are generated ephemerally below
           set -euo pipefail
           certs="$RUNNER_TEMP/pysec-postgres-certs"
           mkdir -p "$certs"
@@ -217,13 +341,13 @@ jobs:
       - name: Exercise live service semantics
         env:
           PYSEC_RUN_SERVICE_INTEGRATION: "1"
-          PYSEC_TEST_POSTGRES_DSN: "postgresql://postgres:pysec-integration-only@localhost:5432/postgres?sslmode=verify-full&channel_binding=require&sslrootcert=${{ runner.temp }}/pysec-postgres-certs/ca.crt"
+          PYSEC_TEST_POSTGRES_DSN: "postgresql://postgres:pysec-integration-only@localhost:5432/postgres?sslmode=verify-full&channel_binding=require&sslrootcert=${{ runner.temp }}/pysec-postgres-certs/ca.crt" # pragma: allowlist secret
           PYSEC_TEST_KAFKA_SERVERS: 127.0.0.1:9092
           PYSEC_TEST_KAFKA_CA: ${{ runner.temp }}/pysec-kafka-certs/ca.crt
           PYSEC_TEST_KAFKA_USER: pysec-test
-          PYSEC_TEST_KAFKA_PASSWORD: pysec-test-integration
+          PYSEC_TEST_KAFKA_PASSWORD: pysec-test-integration # pragma: allowlist secret
           PYSEC_TEST_KAFKA_RESTRICTED_USER: pysec-restricted
-          PYSEC_TEST_KAFKA_RESTRICTED_PASSWORD: pysec-restricted-integration
+          PYSEC_TEST_KAFKA_RESTRICTED_PASSWORD: pysec-restricted-integration # pragma: allowlist secret
         run: >-
           uv run --project companion --frozen pytest -q
           tests/integration/test_services_live.py
@@ -432,11 +556,15 @@ jobs:
         run: >-
           uv run --frozen python scripts/validate_performance_budgets.py
           --output .artifacts/performance/performance-assurance.json
+      - name: Measure complete scan and report workloads
+        run: >-
+          uv run --frozen python scripts/benchmark_full_scan.py --samples 3
+          --output .artifacts/performance/full-scan-benchmark.json
       - name: Install digest-verified actionlint
         shell: bash
         env:
           ACTIONLINT_VERSION: "1.7.12"
-          ACTIONLINT_LINUX_AMD64_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          ACTIONLINT_LINUX_AMD64_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 # pragma: allowlist secret
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/actionlint.tar.gz"
@@ -469,11 +597,24 @@ jobs:
           scripts/prepare_scanner_database.py
           scripts/run_mutation_assurance.py
           scripts/validate_performance_budgets.py
+          scripts/benchmark_full_scan.py
           scripts/validate_public_api.py
+          scripts/validate_documentation_metrics.py
+          scripts/validate_mutation_assurance.py
+          scripts/validate_version_consistency.py
           scripts/validate_live_assurance_policy.py
           scripts/validate_live_test_results.py
           scripts/validate-native-attestation-fixtures.py
           scripts/verify_release_independent.py
+      - name: Enforce the strict primary type-contract surface
+        run: >-
+          uv run --frozen mypy
+          --config-file src/py_security_suite/rules/mypy.ini
+          src
+      - name: Require one authoritative package version
+        run: |
+          uv run --frozen python scripts/validate_version_consistency.py
+          uv run --frozen python -m scripts.validate_documentation_metrics
       - name: Enforce the strict secondary type-contract surface
         run: uv run --frozen pyright
       - name: Retain performance assurance evidence
@@ -481,7 +622,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: performance-assurance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .artifacts/performance/performance-assurance.json
+          path: .artifacts/performance/*.json
           if-no-files-found: error
           retention-days: 90
       - name: Retain architecture assurance evidence
@@ -552,6 +693,9 @@ jobs:
     name: CI required gate
     if: always()
     needs:
+      - product-acceptance
+      - external-benchmark
+      - detection-regressions
       - oci-containment-integration
       - containment-integration
       - companion-service-integration

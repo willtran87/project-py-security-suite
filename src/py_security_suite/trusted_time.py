@@ -5,7 +5,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import rfc3161ng  # type: ignore[import-untyped]
 from cryptography import x509
@@ -468,7 +468,9 @@ def _deployment_values(name: str, *, digest: bool = False) -> set[str]:
 
 def _certificates(value: bytes, label: str) -> list[x509.Certificate]:
     try:
-        certificates = x509.load_pem_x509_certificates(value)
+        certificates = cast(
+            list[x509.Certificate], x509.load_pem_x509_certificates(value)
+        )
     except ValueError:
         try:
             certificates = [_certificate(value)]

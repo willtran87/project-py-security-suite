@@ -56,7 +56,7 @@ def test_pages_audit_reports_security_accessibility_and_link_defects(
     loader_path = tmp_path / "javascripts" / "mermaid-init.js"
     loader_path.write_text(
         loader_path.read_text(encoding="utf-8").replace(
-            "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS",
+            "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS",  # pragma: allowlist secret
             "sha384-invalid",
         ),
         encoding="utf-8",

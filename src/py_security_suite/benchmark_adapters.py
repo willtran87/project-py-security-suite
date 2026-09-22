@@ -1305,7 +1305,7 @@ BUILTIN_ADAPTER_SPECS: tuple[dict[str, Any], ...] = (
         "upstream": "https://www.pcisecuritystandards.org/standards/ and https://www.emvco.com/emv-technologies/3-d-secure/",
         "acquisition": {
             **_COMMON,
-            "license": "licensed-PCI-MPoC-P2PE-PIN-PTS-POI-3DS-program-laboratory-and-solution-specific",
+            "license": "licensed-PCI-MPoC-P2PE-PIN-PTS-POI-3DS-program-laboratory-and-solution-specific",  # pragma: allowlist secret
         },
         "normalizer": "pci-mpoc-p2pe-pin-pts-poi-hsm-3ds-component-flow-conformance-v2",
         "required_inputs": [
@@ -2144,7 +2144,7 @@ BUILTIN_ADAPTER_SPECS += (
         "epss-kev-temporal-backtest",
         "temporal-calibration",
         "https://www.first.org/epss/",
-        "FIRST-EPSS-CISA-KEV-NVD-CVE-historical-snapshot-and-outcome-specific",
+        "FIRST-EPSS-CISA-KEV-NVD-CVE-historical-snapshot-and-outcome-specific",  # pragma: allowlist secret
         "epss-kev-point-in-time-calibration-and-budget-backtest-v1",
         (
             "epss-model-date-kev-catalog-date-cve-universe-outcome-window-and-license-lock",
@@ -2812,7 +2812,7 @@ BUILTIN_ADAPTER_SPECS += (
         "public-safety-communications-assurance",
         "conformance",
         "https://www.nena.org/page/Standards",
-        "NENA-NGSEC-i3-TIA102-DHS-P25-CAP-profile-laboratory-and-fixture-specific",
+        "NENA-NGSEC-i3-TIA102-DHS-P25-CAP-profile-laboratory-and-fixture-specific",  # pragma: allowlist secret
         "ng911-p25-trust-routing-message-location-radio-key-interoperability-and-recovery-v1",
         (
             "nena-040-012-010-tia102-p25-cap-edition-profile-laboratory-and-criteria-lock",
@@ -2827,7 +2827,7 @@ BUILTIN_ADAPTER_SPECS += (
         "global-gxp-data-integrity-assurance",
         "conformance",
         "https://health.ec.europa.eu/medicinal-products/eudralex/eudralex-volume-4_en",
-        "EU-GMP-Annex11-WHO-TRS1033-PICS-PI041-1-jurisdiction-system-and-fixture-specific",
+        "EU-GMP-Annex11-WHO-TRS1033-PICS-PI041-1-jurisdiction-system-and-fixture-specific",  # pragma: allowlist secret
         "global-gxp-system-lifecycle-alcoa-plus-metadata-audit-trail-migration-and-restore-v1",
         (
             "annex11-2011-who-trs1033-annex4-pics-pi041-1-edition-jurisdiction-and-criteria-lock",
@@ -2872,7 +2872,7 @@ BUILTIN_ADAPTER_SPECS += (
         "gas-scada-cryptographic-assurance",
         "conformance",
         "https://www.aga.org/natural-gas/security/cybersecurity/aga-cybersecurity-initiatives/",
-        "AGA-Report12-Part1-API1164-IEC62351-gas-SCADA-profile-and-fixture-specific",
+        "AGA-Report12-Part1-API1164-IEC62351-gas-SCADA-profile-and-fixture-specific",  # pragma: allowlist secret
         "gas-scada-channel-message-cryptographic-key-degraded-mode-and-recovery-v1",
         (
             "aga-report12-part1-api1164-iec62351-edition-profile-criteria-and-license-lock",
@@ -2921,7 +2921,7 @@ BUILTIN_ADAPTER_SPECS += (
         "do355-continuing-airworthiness-exercise",
         "conformance",
         "https://www.faa.gov/aircraft/air_cert/design_approvals/dah/cybersecurity",
-        "licensed-RTCA-DO355A-SAE-ARP5150B-ARP5151B-aircraft-configuration-operator-and-authority-specific",
+        "licensed-RTCA-DO355A-SAE-ARP5150B-ARP5151B-aircraft-configuration-operator-and-authority-specific",  # pragma: allowlist secret
         "do355a-arp5150b-arp5151b-service-signal-safety-security-and-fleet-effectiveness-v2",
         (
             "licensed-do355a-arp5150b-arp5151b-criteria-accepted-means-assessor-and-license-lock",

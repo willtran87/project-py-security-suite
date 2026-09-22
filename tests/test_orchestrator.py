@@ -25,11 +25,13 @@ from py_security_suite.models import (
     ToolStatus,
 )
 from py_security_suite.orchestrator import (
+    _STRUCTURAL_QUALITY_PROFILES,
     _runtime_evidence_paths,
     resolve_asset_paths,
     scan_project,
 )
 from py_security_suite.path_safety import HeldParentDirectory
+from py_security_suite.scan_control import ScanControl, controlled_scan
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
     _finding_priority,
@@ -135,6 +137,48 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_cancelled_scan_preserves_finished_findings_in_verified_report(
+        self,
+    ) -> None:
+        control = ScanControl()
+
+        class CancelAfterBandit(FakeBandit):
+            def run(self, target: Path) -> AdapterResult:
+                result = super().run(target)
+                control.cancel()
+                return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "project"
+            target.mkdir()
+            (target / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            config = load_config(profile_override="quick")
+            config.execution.max_workers = 1
+            with controlled_scan(control):
+                result = scan_project(
+                    target=target,
+                    output=root / "report",
+                    config=config,
+                    network_isolation_attested=True,
+                    adapter_types={
+                        "bandit": CancelAfterBandit,
+                        "detect-secrets": FakeSecrets,
+                    },
+                )
+            self.assertEqual(result.outcome, Outcome.INCOMPLETE)
+            self.assertIn("scan cancelled by operator", result.manifest.policy_reasons)
+            self.assertTrue(
+                any(item.finding_id == "PYSEC-FAKE" for item in result.findings)
+            )
+            self.assertEqual(result.tool_runs[1].status, ToolStatus.SKIPPED)
+            self.assertEqual(
+                verify_report(root / "report")["scan_id"], result.manifest.scan_id
+            )
+
+    def test_standard_profile_includes_structural_quality_evidence(self) -> None:
+        self.assertIn("standard", _STRUCTURAL_QUALITY_PROFILES)
+
     def test_report_order_uses_derived_priority(self) -> None:
         def finding(
             finding_id: str,
@@ -1206,7 +1250,7 @@ class OrchestratorTests(unittest.TestCase):
                 result.manifest.inventory.source_sha256_after,
             )
             self.assertIn(
-                "target content changed during scanner execution",
+                "sealed scan snapshot changed during scanner execution",
                 " ".join(result.manifest.policy_reasons),
             )
 

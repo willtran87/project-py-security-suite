@@ -7,26 +7,35 @@ import sys
 import time
 import uuid
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from datetime import timedelta
 from typing import Any
 
+from .scan_governance import production_state_errors
+from .scan_finalization import verify_final_source
+from .source_index import source_analysis_session
+from .scan_scheduler import run_adapters as _run_adapters
+from contextlib import suppress
+from .scan_control import (
+    ScanInterrupted,
+    analysis_checkpoint,
+    emit_progress,
+    stop_reason,
+    scan_session,
+)
+from .scan_enrichment import industry_assurance_errors
 from .version import __version__
 from .adapters import ADAPTER_TYPES
-from .adapters.base import AdapterResult, ScannerAdapter
-from .application_contracts import analyze_application_contracts
+from .adapters.base import ScannerAdapter
 from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
-from .code_health import analyze_code_health
 from .correlation import correlate_findings
 from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
-from .dependency_surface import dependency_surface_artifact
+from .dependency_surface import dependency_surface_artifact, inventory_dependencies
 from .domain_assurance import analyze_domain_assurance
 from .llm_adversarial import build_llm_adversarial_plan
 from .finding_delta import apply_finding_delta
 from .finding_validation import apply_finding_validation
-from .framework_coverage import framework_model_coverage
 from .governance import (
     validate_intelligence_approval,
     validate_isolation_evidence,
@@ -38,10 +47,7 @@ from .evidence_fusion import build_evidence_fusion
 from .inventory import (
     inventory_target_with_evidence,
     sealed_source_snapshot,
-    source_snapshot,
 )
-from .industry_assurance import build_industry_assurance
-from .industry_receipt_trust import load_industry_receipt_trust
 from .isolation_probe import probe_isolation_boundary
 from .models import (
     Finding,
@@ -56,7 +62,6 @@ from .models import (
 from .policy import evaluate_policy
 from .admission import admission_decisions
 from .advanced_analysis import build_advanced_analysis
-from .architecture_history import architecture_history
 from .boundary_graph import build_boundary_graph
 from .capability_manifest import capability_manifest
 from .portfolio_health import portfolio_health_artifact
@@ -68,17 +73,15 @@ from .runtime_reachability import apply_runtime_trace_observations
 from .runtime_surface import runtime_surface_binding_artifact
 from .source_context import attach_source_context, sanitize_secret_findings
 from .semantic_coverage import semantic_language_coverage_artifact
+from .source_assurance import STRUCTURAL_QUALITY_PROFILES, apply_source_assurance
 from .requirements_coverage import security_requirements_coverage_artifact
 from .structural_synthesis import build_structural_synthesis
-from .static_architecture import analyze_static_architecture
 from .trust_catalog import apply_trust_catalog
 from .trust_policy import activated_trust_environment, snapshot_trust_policy
 from .trust_attestation import validate_trust_policy_attestation
 
 
-_STRUCTURAL_QUALITY_PROFILES = frozenset(
-    {"audit", "quality", "repo", "comprehensive", "production", "release"}
-)
+_STRUCTURAL_QUALITY_PROFILES = STRUCTURAL_QUALITY_PROFILES
 
 
 def scan_project(
@@ -91,7 +94,12 @@ def scan_project(
     adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
     replace_existing: bool = False,
 ) -> ScanResult:
-    with activated_trust_environment(config.trust_environment):
+    with (
+        scan_session(
+            config.execution.max_scan_seconds, config.execution.max_scan_memory_bytes
+        ),
+        activated_trust_environment(config.trust_environment),
+    ):
         return _scan_project_active(
             target=target,
             output=output,
@@ -113,6 +121,7 @@ def _scan_project_active(
     adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
     replace_existing: bool = False,
 ) -> ScanResult:
+    analysis_checkpoint()
     target = resolve_regular_directory(target, "scan target")
     output = resolve_unlinked_path(output, "report output")
     if not target.is_dir():
@@ -122,17 +131,22 @@ def _scan_project_active(
     resolve_asset_paths(config, target)
     selected = list(config.selected_tools)
     source_exclusions = (output, *_runtime_evidence_paths(config, selected))
+    emit_progress("snapshot", "started")
     inventory, source_inventory = inventory_target_with_evidence(
         target, excluded_paths=source_exclusions
     )
-    with sealed_source_snapshot(
-        target,
-        source_inventory,
-        vcs_revision=(
-            inventory.vcs_revision if inventory.vcs_revision_verified else ""
-        ),
-        require_signed_git_provenance=config.profile in {"production", "release"},
-    ) as scan_target:
+    with (
+        sealed_source_snapshot(
+            target,
+            source_inventory,
+            vcs_revision=(
+                inventory.vcs_revision if inventory.vcs_revision_verified else ""
+            ),
+            require_signed_git_provenance=config.profile in {"production", "release"},
+        ) as scan_target,
+        source_analysis_session(scan_target),
+    ):
+        emit_progress("snapshot", "completed")
         return _scan_sealed_project(
             target=target,
             scan_target=scan_target,
@@ -191,20 +205,27 @@ def _scan_sealed_project(
         "key_lifecycle_enforcement": "signed-provider-receipt-and-cryptographic-erasure",
         "plaintext_disposal": "optional-post-encryption-verified-purge",
     }
+    dependency_inventory = inventory_dependencies(scan_target)
     derived_artifacts["dependency-surface.json"] = dependency_surface_artifact(
-        scan_target
+        scan_target, inventory=dependency_inventory
     )
+    emit_progress("boundary-analysis", "started")
     boundary_graph = build_boundary_graph(
         scan_target,
         require_governed_parsers=config.profile in {"production", "release"},
         allow_ungoverned_binary_parsers=config.profile not in {"production", "release"},
     )
     derived_artifacts["boundary-graph.json"] = boundary_graph
+    emit_progress("boundary-analysis", "completed")
     from .runtime_trace import runtime_trace_artifact
 
     runtime_trace = runtime_trace_artifact(boundary_graph)
     derived_artifacts["runtime-trace-correlation.json"] = runtime_trace
     context_errors: list[str] = []
+    if derived_artifacts["dependency-surface.json"]["omitted_manifests"]:
+        context_errors.append(
+            "dependency manifest inventory exceeded its per-ecosystem limit"
+        )
     if config.profile in {"production", "release"} and not runtime_trace["complete"]:
         context_errors.append(
             "signed deployment-bound runtime request-to-sink trace evidence is required"
@@ -273,14 +294,15 @@ def _scan_sealed_project(
         config.isolation.require_attestation
         and not network_isolation_attested
         and not diagnostic_without_isolation
-    ):
+    ) or stop_reason():
         tool_runs = [
             ToolRun(
                 tool=name,
                 status=ToolStatus.SKIPPED,
                 command=[config.tools[name].executable],
                 duration_seconds=0.0,
-                error="scan not started because network isolation was not attested",
+                error=stop_reason()
+                or "scan not started because network isolation was not attested",
             )
             for name in selected
         ]
@@ -295,185 +317,174 @@ def _scan_sealed_project(
             for run in tool_runs
         }
     else:
+        emit_progress("scanners", "started")
         findings, tool_runs, diagnostics, adapter_artifacts = _run_adapters(
             target=scan_target,
             config=config,
             selected=selected,
             adapter_types=adapter_types or ADAPTER_TYPES,
         )
+        emit_progress("scanners", "stopped" if stop_reason() else "completed")
         _annotate_tool_authority(tool_runs, diagnostics, config)
+        sanitize_secret_findings(findings)
+        collisions = derived_artifacts.keys() & adapter_artifacts.keys()
+        if collisions:
+            raise ValueError(f"adapter overwrote suite artifacts: {sorted(collisions)}")
         derived_artifacts.update(adapter_artifacts)
-        semantic_coverage = semantic_language_coverage_artifact(
-            boundary_graph, derived_artifacts
-        )
-        derived_artifacts["semantic-language-coverage.json"] = semantic_coverage
-        if (
-            config.profile in {"production", "release"}
-            and not semantic_coverage["complete"]
-        ):
-            context_errors.append(
-                "non-Python boundary extraction requires authenticated, source-bound, complete semantic polyglot evidence"
+        with suppress(ScanInterrupted):
+            analysis_checkpoint()
+            emit_progress("evidence-analysis", "started")
+            semantic_coverage = semantic_language_coverage_artifact(
+                boundary_graph, derived_artifacts
             )
-        dependency_surface = dependency_surface_artifact(
-            scan_target, tool_runs, derived_artifacts
-        )
-        derived_artifacts["dependency-surface.json"] = dependency_surface
-        if (
-            config.profile in {"production", "release"}
-            and not dependency_surface["complete"]
-        ):
-            uncovered = ", ".join(
-                item["ecosystem"]
-                for item in dependency_surface["coverage"]
-                if not item["covered"]
+            derived_artifacts["semantic-language-coverage.json"] = semantic_coverage
+            if (
+                config.profile in {"production", "release"}
+                and not semantic_coverage["complete"]
+            ):
+                context_errors.append(
+                    "non-Python boundary extraction requires authenticated, source-bound, complete semantic polyglot evidence"
+                )
+            analysis_checkpoint()
+            dependency_surface = dependency_surface_artifact(
+                scan_target,
+                tool_runs,
+                derived_artifacts,
+                inventory=dependency_inventory,
             )
-            context_errors.append(
-                "multi-ecosystem dependency analysis is incomplete for: " + uncovered
+            derived_artifacts["dependency-surface.json"] = dependency_surface
+            if (
+                config.profile in {"production", "release"}
+                and not dependency_surface["complete"]
+            ):
+                uncovered = ", ".join(
+                    item["ecosystem"]
+                    for item in dependency_surface["coverage"]
+                    if not item["covered"]
+                )
+                context_errors.append(
+                    "multi-ecosystem dependency analysis is incomplete for: "
+                    + uncovered
+                )
+            runtime_surface = runtime_surface_binding_artifact(
+                tool_runs, derived_artifacts
             )
-        runtime_surface = runtime_surface_binding_artifact(tool_runs, derived_artifacts)
-        derived_artifacts["runtime-surface-binding.json"] = runtime_surface
-        if (
-            config.profile in {"production", "release"}
-            and not runtime_surface["complete"]
-        ):
-            context_errors.append(
-                "runtime assurance lanes do not share one canonical surface context "
-                "with independently corroborated clean claims"
+            derived_artifacts["runtime-surface-binding.json"] = runtime_surface
+            if (
+                config.profile in {"production", "release"}
+                and not runtime_surface["complete"]
+            ):
+                context_errors.append(
+                    "runtime assurance lanes do not share one canonical surface context "
+                    "with independently corroborated clean claims"
+                )
+            reachability_feedback = apply_runtime_trace_observations(
+                derived_artifacts.get("reachability.json"),
+                runtime_trace,
+                boundary_graph,
             )
-        reachability_feedback = apply_runtime_trace_observations(
-            derived_artifacts.get("reachability.json"), runtime_trace, boundary_graph
-        )
-        if (
-            config.profile in {"production", "release"}
-            and runtime_trace["complete"]
-            and not reachability_feedback["complete"]
-        ):
-            context_errors.append(
-                "authenticated Python runtime traces could not be mapped back to exact reachability nodes"
-            )
-        framework_findings, framework_coverage = framework_model_coverage(
-            scan_target, tool_runs, findings
-        )
-        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
-        findings[:] = [
-            finding
-            for finding in findings
-            if finding.finding_id not in qualified_canary_ids
-        ]
-        findings.extend(framework_findings)
-        derived_artifacts["framework-model-coverage.json"] = framework_coverage
-        if (
-            config.profile in {"production", "release"}
-            and not framework_coverage["complete"]
-            and (
-                framework_coverage["frameworks_detected"]
-                or framework_coverage["parse_errors"]
-            )
-        ):
-            context_errors.append(
-                "detected Python frameworks lack digest-bound semantic models, positive/negative canaries, or a completed model engine"
-            )
-        contract_findings, contract_artifact = analyze_application_contracts(
-            scan_target, derived_artifacts
-        )
-        findings.extend(contract_findings)
-        derived_artifacts["application-contract-analysis.json"] = contract_artifact
-        if (
-            config.profile in {"production", "release"}
-            and not contract_artifact["complete"]
-            and (
-                contract_artifact["contract_present"]
-                or contract_artifact["openapi"]["current_path"]
-            )
-        ):
-            context_errors.append(
-                "application contracts contain API drift, missing authorization test evidence, vulnerable-function calls, or analysis errors"
-            )
-        if config.profile in _STRUCTURAL_QUALITY_PROFILES:
-            code_health_findings, code_health_artifact = analyze_code_health(
-                scan_target
-            )
-            findings.extend(code_health_findings)
-            derived_artifacts["code-health.json"] = code_health_artifact
-            static_architecture_findings, static_architecture_artifact = (
-                analyze_static_architecture(
-                    scan_target, derived_artifacts.get("reachability.json")
+            if (
+                config.profile in {"production", "release"}
+                and runtime_trace["complete"]
+                and not reachability_feedback["complete"]
+            ):
+                context_errors.append(
+                    "authenticated Python runtime traces could not be mapped back to exact reachability nodes"
+                )
+            analysis_checkpoint()
+            context_errors.extend(
+                apply_source_assurance(
+                    target=scan_target,
+                    profile=config.profile,
+                    findings=findings,
+                    tool_runs=tool_runs,
+                    artifacts=derived_artifacts,
                 )
             )
-            findings.extend(static_architecture_findings)
-            derived_artifacts["static-architecture.json"] = static_architecture_artifact
-            architecture_findings, architecture_artifact = architecture_history(
-                scan_target, findings
+            analysis_checkpoint()
+            domain_findings, domain_artifact = analyze_domain_assurance(
+                scan_target, derived_artifacts
             )
-            findings.extend(architecture_findings)
-            derived_artifacts["architecture-history.json"] = architecture_artifact
-        domain_findings, domain_artifact = analyze_domain_assurance(
-            scan_target, derived_artifacts
-        )
-        findings.extend(domain_findings)
-        derived_artifacts["domain-assurance.json"] = domain_artifact
-        sanitize_secret_findings(findings)
-        findings = correlate_findings(findings)
-        intelligence = enrich_findings(findings, config.intelligence)
-        context_errors.extend(intelligence.errors)
-        intelligence_artifact = intelligence.artifact
-        derived_artifacts["risk-intelligence.json"] = intelligence.artifact
-        intelligence_approval = validate_intelligence_approval(
-            config.intelligence,
-            intelligence.artifact,
-            observed_at=started_at,
-            trust_environment=config.trust_environment,
-        )
-        context_errors.extend(intelligence_approval.errors)
-        derived_artifacts["intelligence-approval.json"] = intelligence_approval.artifact
-        delta = apply_finding_delta(
-            findings,
-            target=scan_target,
-            baseline_path=config.reports.baseline_path,
-            baseline_sha256=config.reports.baseline_sha256,
-            current_profile=config.profile,
-            current_tools=tuple(selected),
-            current_source_sha256=inventory.source_sha256,
-            current_vcs_revision=inventory.vcs_revision,
-        )
-        context_errors.extend(delta.errors)
-        baseline_artifact = delta.artifact
-        derived_artifacts["finding-delta.json"] = delta.artifact
-        attach_source_context(scan_target, findings)
-        graph_analysis = apply_graph_context(findings, derived_artifacts)
-        if graph_analysis is not None:
-            derived_artifacts["graph-analysis.json"] = graph_analysis
-        structural_synthesis = build_structural_synthesis(findings, derived_artifacts)
-        if structural_synthesis is not None:
-            derived_artifacts["structural-synthesis.json"] = structural_synthesis
-        derived_artifacts["data-exposure.json"] = build_data_exposure_synthesis(
-            scan_target, findings, derived_artifacts
-        )
-        fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
-        derived_artifacts["evidence-fusion.json"] = fusion
-        apply_data_exposure_fusion(
-            derived_artifacts["data-exposure.json"], findings, fusion
-        )
-        derived_artifacts["effectiveness.json"] = effectiveness_artifact(
-            findings, tool_runs
-        )
-        derived_artifacts["risk-paths.json"] = build_risk_paths(
-            findings, derived_artifacts
-        )
-        derived_artifacts["advanced-analysis.json"] = build_advanced_analysis(
-            scan_target, findings, derived_artifacts
-        )
-        derived_artifacts["finding-validation.json"] = apply_finding_validation(
-            findings, derived_artifacts
-        )
-        context_errors.extend(
-            (
-                "evidence fusion contradiction for "
-                f"{contradiction['finding_id']}: {contradiction['message']}"
+            findings.extend(domain_findings)
+            derived_artifacts["domain-assurance.json"] = domain_artifact
+            sanitize_secret_findings(findings)
+            findings = correlate_findings(findings)
+            analysis_checkpoint()
+            intelligence = enrich_findings(findings, config.intelligence)
+            context_errors.extend(intelligence.errors)
+            intelligence_artifact = intelligence.artifact
+            derived_artifacts["risk-intelligence.json"] = intelligence.artifact
+            intelligence_approval = validate_intelligence_approval(
+                config.intelligence,
+                intelligence.artifact,
+                observed_at=started_at,
+                trust_environment=config.trust_environment,
             )
-            for contradiction in fusion["contradictions"]
-        )
+            context_errors.extend(intelligence_approval.errors)
+            derived_artifacts["intelligence-approval.json"] = (
+                intelligence_approval.artifact
+            )
+            analysis_checkpoint()
+            delta = apply_finding_delta(
+                findings,
+                target=scan_target,
+                baseline_path=config.reports.baseline_path,
+                baseline_sha256=config.reports.baseline_sha256,
+                current_profile=config.profile,
+                current_tools=tuple(selected),
+                current_source_sha256=inventory.source_sha256,
+                current_vcs_revision=inventory.vcs_revision,
+            )
+            context_errors.extend(delta.errors)
+            baseline_artifact = delta.artifact
+            derived_artifacts["finding-delta.json"] = delta.artifact
+            analysis_checkpoint()
+            attach_source_context(scan_target, findings)
+            analysis_checkpoint()
+            graph_analysis = apply_graph_context(findings, derived_artifacts)
+            if graph_analysis is not None:
+                derived_artifacts["graph-analysis.json"] = graph_analysis
+            analysis_checkpoint()
+            structural_synthesis = build_structural_synthesis(
+                findings, derived_artifacts
+            )
+            if structural_synthesis is not None:
+                derived_artifacts["structural-synthesis.json"] = structural_synthesis
+            analysis_checkpoint()
+            derived_artifacts["data-exposure.json"] = build_data_exposure_synthesis(
+                scan_target, findings, derived_artifacts
+            )
+            analysis_checkpoint()
+            fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
+            derived_artifacts["evidence-fusion.json"] = fusion
+            apply_data_exposure_fusion(
+                derived_artifacts["data-exposure.json"], findings, fusion
+            )
+            derived_artifacts["effectiveness.json"] = effectiveness_artifact(
+                findings, tool_runs
+            )
+            analysis_checkpoint()
+            derived_artifacts["risk-paths.json"] = build_risk_paths(
+                findings, derived_artifacts
+            )
+            analysis_checkpoint()
+            derived_artifacts["advanced-analysis.json"] = build_advanced_analysis(
+                scan_target, findings, derived_artifacts
+            )
+            derived_artifacts["finding-validation.json"] = apply_finding_validation(
+                findings, derived_artifacts
+            )
+            context_errors.extend(
+                (
+                    "evidence fusion contradiction for "
+                    f"{contradiction['finding_id']}: {contradiction['message']}"
+                )
+                for contradiction in fusion["contradictions"]
+            )
+            emit_progress("evidence-analysis", "completed")
 
+    if stop_reason():
+        emit_progress("evidence-analysis", "stopped")
     resource_assurance = _resource_limit_assurance(
         tool_runs,
         diagnostics,
@@ -502,73 +513,40 @@ def _scan_sealed_project(
         config.profile, tool_runs
     )
 
-    if "framework-model-coverage.json" not in derived_artifacts:
-        framework_findings, framework_coverage = framework_model_coverage(
-            scan_target, tool_runs, findings
-        )
-        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
-        findings[:] = [
-            finding
-            for finding in findings
-            if finding.finding_id not in qualified_canary_ids
-        ]
-        findings.extend(framework_findings)
-        derived_artifacts["framework-model-coverage.json"] = framework_coverage
-    if "application-contract-analysis.json" not in derived_artifacts:
-        contract_findings, contract_artifact = analyze_application_contracts(
-            scan_target, derived_artifacts
-        )
-        findings.extend(contract_findings)
-        derived_artifacts["application-contract-analysis.json"] = contract_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "code-health.json" not in derived_artifacts
-    ):
-        code_health_findings, code_health_artifact = analyze_code_health(scan_target)
-        findings.extend(code_health_findings)
-        derived_artifacts["code-health.json"] = code_health_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "static-architecture.json" not in derived_artifacts
-    ):
-        static_architecture_findings, static_architecture_artifact = (
-            analyze_static_architecture(
-                scan_target, derived_artifacts.get("reachability.json")
+    with suppress(ScanInterrupted):
+        analysis_checkpoint()
+        context_errors.extend(
+            apply_source_assurance(
+                target=scan_target,
+                profile=config.profile,
+                findings=findings,
+                tool_runs=tool_runs,
+                artifacts=derived_artifacts,
             )
         )
-        findings.extend(static_architecture_findings)
-        derived_artifacts["static-architecture.json"] = static_architecture_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "architecture-history.json" not in derived_artifacts
-    ):
-        architecture_findings, architecture_artifact = architecture_history(
-            scan_target, findings
-        )
-        findings.extend(architecture_findings)
-        derived_artifacts["architecture-history.json"] = architecture_artifact
-    if "domain-assurance.json" not in derived_artifacts:
-        domain_findings, domain_artifact = analyze_domain_assurance(
-            scan_target, derived_artifacts
-        )
-        findings.extend(domain_findings)
-        derived_artifacts["domain-assurance.json"] = domain_artifact
-    domain_assurance = derived_artifacts["domain-assurance.json"]
-    if (
-        config.profile in {"production", "release"}
-        and isinstance(domain_assurance, dict)
-        and domain_assurance.get("policy_present") is True
-        and (
-            domain_assurance.get("complete") is not True
-            or (
-                domain_assurance.get("enforce_inferred_domains") is True
-                and domain_assurance.get("coverage_complete") is not True
+        analysis_checkpoint()
+        if "domain-assurance.json" not in derived_artifacts:
+            domain_findings, domain_artifact = analyze_domain_assurance(
+                scan_target, derived_artifacts
             )
-        )
-    ):
-        context_errors.append(
-            "declared cross-domain assurance policy is incomplete or has uncovered applicable domains"
-        )
+            findings.extend(domain_findings)
+            derived_artifacts["domain-assurance.json"] = domain_artifact
+        domain_assurance = derived_artifacts["domain-assurance.json"]
+        if (
+            config.profile in {"production", "release"}
+            and isinstance(domain_assurance, dict)
+            and domain_assurance.get("policy_present") is True
+            and (
+                domain_assurance.get("complete") is not True
+                or (
+                    domain_assurance.get("enforce_inferred_domains") is True
+                    and domain_assurance.get("coverage_complete") is not True
+                )
+            )
+        ):
+            context_errors.append(
+                "declared cross-domain assurance policy is incomplete or has uncovered applicable domains"
+            )
     if "effectiveness.json" not in derived_artifacts:
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts["effectiveness.json"] = effectiveness_artifact(
@@ -597,147 +575,36 @@ def _scan_sealed_project(
         context_errors.append(
             "applicable mapped ASVS, MASVS, or TCASVS controls lack retained evidence"
         )
-    llm_adversarial_plan, llm_adversarial_errors = build_llm_adversarial_plan(
-        scan_target, findings, derived_artifacts
-    )
-    derived_artifacts["llm-adversarial-plan.json"] = llm_adversarial_plan
-    if (
-        config.profile in {"production", "release"}
-        and llm_adversarial_plan["policy_present"] is True
-        and llm_adversarial_plan["complete"] is not True
-    ):
-        reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
-        context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
-    receipt_trust_policy, receipt_trust_errors = load_industry_receipt_trust(
-        scan_target
-    )
-    industry_artifacts, industry_errors = build_industry_assurance(
-        scan_target,
-        derived_artifacts,
-        findings,
-        receipt_trust_policy=receipt_trust_policy,
-    )
-    industry_errors = [*receipt_trust_errors, *industry_errors]
-    derived_artifacts.update(industry_artifacts)
-    control_assessment = industry_artifacts["control-assessment.json"]
-    benchmark_scorecard = industry_artifacts["benchmark-scorecard.json"]
-    if config.profile in {"production", "release"} and industry_errors:
+    with suppress(ScanInterrupted):
+        analysis_checkpoint()
+        llm_adversarial_plan, llm_adversarial_errors = build_llm_adversarial_plan(
+            scan_target, findings, derived_artifacts
+        )
+        derived_artifacts["llm-adversarial-plan.json"] = llm_adversarial_plan
+        if (
+            config.profile in {"production", "release"}
+            and llm_adversarial_plan["policy_present"] is True
+            and llm_adversarial_plan["complete"] is not True
+        ):
+            reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
+            context_errors.extend(
+                f"LLM adversarial planning: {error}" for error in reasons
+            )
+    with suppress(ScanInterrupted):
         context_errors.extend(
-            f"industry assurance: {error}" for error in industry_errors
-        )
-    if (
-        config.profile in {"production", "release"}
-        and control_assessment["enforced"] is True
-        and control_assessment["complete"] is not True
-    ):
-        context_errors.append(
-            "enforced industry control assessment contains unsatisfied controls"
-        )
-    if (
-        config.profile in {"production", "release"}
-        and benchmark_scorecard["benchmarks_enabled"]
-        and (
-            benchmark_scorecard["complete"] is not True
-            or benchmark_scorecard["passed"] is not True
-        )
-    ):
-        context_errors.append(
-            "enabled industry benchmarks lack valid passing governed evidence"
-        )
-    if config.profile in {"production", "release"} and _has_local_monotonic_receipt(
-        derived_artifacts
-    ):
-        context_errors.append(
-            "deployment authority generations require an external monotonic CAS backend"
-        )
-    if config.profile in {"production", "release"}:
-        anchored_state = (
-            "PYSEC_OPERATION_RECEIPT_STATE_PATH",
-            "PYSEC_OPERATION_RECEIPT_MIN_SEQUENCE",
-            "PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256",
-            "PYSEC_TRUSTED_TIME_STATE_PATH",
-            "PYSEC_TRUSTED_TIME_MIN_SEQUENCE",
-            "PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256",
-        )
-        missing_state = [name for name in anchored_state if not os.environ.get(name)]
-        if missing_state:
-            context_errors.append(
-                "production replay and trusted-time state lacks deployment anchors: "
-                + ", ".join(missing_state)
+            industry_assurance_errors(
+                scan_target, findings, derived_artifacts, config.profile
             )
-        external_checkpoints = (
-            (
-                "PYSEC_OPERATION_RECEIPT_CHECKPOINT",
-                "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT",
-            ),
-            (
-                "PYSEC_TRUSTED_TIME_CHECKPOINT",
-                "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT",
-            ),
         )
-        missing_external = [
-            prefix
-            for prefix, required_name in external_checkpoints
-            if os.environ.get(required_name) != "1"
-            or not os.environ.get(f"{prefix}_COMMAND_JSON")
-            or not os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256")
-            or not os.environ.get(f"{prefix}_FAILURE_DOMAIN_JSON")
-        ]
-        if missing_external:
-            context_errors.append(
-                "production monotonic state lacks independently attested external "
-                "checkpoint authorities: " + ", ".join(missing_external)
-            )
-        else:
-            try:
-                from .failure_domain import require_independent_failure_domains
-                from .strict_json import loads as strict_loads
+    context_errors.extend(production_state_errors(config.profile, derived_artifacts))
 
-                operation_domain = strict_loads(
-                    os.environ["PYSEC_OPERATION_RECEIPT_CHECKPOINT_FAILURE_DOMAIN_JSON"]
-                )
-                time_domain = strict_loads(
-                    os.environ["PYSEC_TRUSTED_TIME_CHECKPOINT_FAILURE_DOMAIN_JSON"]
-                )
-                require_independent_failure_domains(
-                    operation_domain,
-                    time_domain,
-                    labels=(
-                        "operation checkpoint authority",
-                        "trusted-time checkpoint authority",
-                    ),
-                )
-            except (KeyError, TypeError, ValueError):
-                context_errors.append(
-                    "production checkpoint authorities do not span independent "
-                    "organization, host, control-plane, and implementation domains"
-                )
-
-    (
-        inventory.source_sha256_after,
-        inventory.hashed_files_after,
-        inventory.hashed_bytes_after,
-    ) = source_snapshot(target, excluded_paths=source_exclusions)
-    snapshot_after = source_snapshot(scan_target)
-    snapshot_integrity_verified = snapshot_after == (
-        inventory.source_sha256,
-        inventory.hashed_files,
-        inventory.hashed_bytes,
-    )
-    if not snapshot_integrity_verified:
-        context_errors.append("sealed scan snapshot changed during scanner execution")
-    if inventory.skipped_symlinks:
-        context_errors.append(
-            f"source inventory rejected {inventory.skipped_symlinks} symbolic link(s)"
-        )
-    inventory.source_integrity_verified = (
-        inventory.source_sha256 == inventory.source_sha256_after
-        and inventory.hashed_files == inventory.hashed_files_after
-        and inventory.hashed_bytes == inventory.hashed_bytes_after
-        and snapshot_integrity_verified
-        and inventory.skipped_symlinks == 0
+    context_errors.extend(
+        verify_final_source(inventory, target, scan_target, source_exclusions)
     )
 
+    if stop_reason():
+        context_errors.append(stop_reason())
+    emit_progress("report", "started")
     decision = evaluate_policy(
         config=config,
         findings=findings,
@@ -812,6 +679,7 @@ def _scan_sealed_project(
         derived_artifacts=derived_artifacts,
         replace_existing=replace_existing,
     )
+    emit_progress("report", "completed")
     return ScanResult(
         outcome=decision.outcome,
         findings=findings,
@@ -1148,116 +1016,3 @@ def _configuration_digest(config: SuiteConfig, *, trust_policy_sha256: str = "")
         ensure_ascii=False,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _run_adapters(
-    *,
-    target: Path,
-    config: SuiteConfig,
-    selected: list[str],
-    adapter_types: Mapping[str, type[ScannerAdapter]],
-) -> tuple[
-    list[Finding],
-    list[ToolRun],
-    dict[str, dict[str, Any]],
-    dict[str, Any],
-]:
-    results: dict[str, AdapterResult] = {}
-    skipped: dict[str, AdapterResult] = {}
-    runnable: dict[str, ScannerAdapter] = {}
-    for name in selected:
-        tool_config = config.tools[name]
-        if not tool_config.enabled:
-            run = ToolRun(
-                tool=name,
-                status=ToolStatus.SKIPPED,
-                command=[tool_config.executable],
-                duration_seconds=0.0,
-                error="scanner disabled by configuration",
-            )
-            skipped[name] = AdapterResult(
-                findings=[],
-                tool_run=run,
-                diagnostic={
-                    "tool": name,
-                    "status": run.status,
-                    "error": run.error,
-                    "raw_output_retained": False,
-                },
-            )
-            continue
-        adapter_type = adapter_types.get(name)
-        if adapter_type is None:
-            run = ToolRun(
-                tool=name,
-                status=ToolStatus.UNAVAILABLE,
-                command=[tool_config.executable],
-                duration_seconds=0.0,
-                error="adapter is not implemented",
-            )
-            skipped[name] = AdapterResult(
-                findings=[],
-                tool_run=run,
-                diagnostic={
-                    "tool": name,
-                    "status": run.status,
-                    "error": run.error,
-                    "raw_output_retained": False,
-                },
-            )
-            continue
-        runnable[name] = adapter_type(tool_config, config.execution.max_output_bytes)
-
-    with ThreadPoolExecutor(
-        max_workers=min(config.execution.max_workers, max(len(runnable), 1)),
-        thread_name_prefix="pysec",
-    ) as executor:
-        futures = {
-            executor.submit(adapter.run, target): name
-            for name, adapter in runnable.items()
-        }
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                results[name] = future.result()
-            # Scanner adapters are an isolation boundary: convert every failure into
-            # an explicit tool result so one adapter cannot abort the whole scan.
-            except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
-                run = ToolRun(
-                    tool=name,
-                    status=ToolStatus.FAILED,
-                    command=[config.tools[name].executable],
-                    duration_seconds=0.0,
-                    error=f"unhandled adapter failure: {type(exc).__name__}",
-                )
-                results[name] = AdapterResult(
-                    findings=[],
-                    tool_run=run,
-                    diagnostic={
-                        "tool": name,
-                        "status": run.status,
-                        "error": run.error,
-                        "raw_output_retained": False,
-                    },
-                )
-
-    results.update(skipped)
-    ordered = [results[name] for name in selected]
-    findings = [finding for result in ordered for finding in result.findings]
-    tool_runs = [result.tool_run for result in ordered]
-    diagnostics = {result.tool_run.tool: result.diagnostic for result in ordered}
-    artifacts = {
-        name: value for result in ordered for name, value in result.artifacts.items()
-    }
-    return findings, tool_runs, diagnostics, artifacts
-
-
-def _has_local_monotonic_receipt(value: object) -> bool:
-    if isinstance(value, dict):
-        state = value.get("monotonic_state")
-        if isinstance(state, dict) and state.get("mode") == "local-sqlite":
-            return True
-        return any(_has_local_monotonic_receipt(item) for item in value.values())
-    if isinstance(value, list):
-        return any(_has_local_monotonic_receipt(item) for item in value)
-    return False

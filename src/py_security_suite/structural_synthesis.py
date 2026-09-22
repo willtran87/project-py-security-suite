@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
 
 from .models import Citation, Finding
 from .structural_leverage import build_structural_leverage
@@ -730,7 +730,7 @@ def _nearest_graph_node(
         if symbol_matches:
             candidates = symbol_matches
     if not isinstance(line, int):
-        return candidates[0]
+        return cast(dict[str, Any], candidates[0])
     preceding = [
         node
         for node in candidates
@@ -739,7 +739,7 @@ def _nearest_graph_node(
     return (
         max(preceding, key=lambda item: int(item["line"]))
         if preceding
-        else candidates[0]
+        else cast(dict[str, Any], candidates[0])
     )
 
 

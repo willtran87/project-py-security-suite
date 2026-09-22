@@ -1,6 +1,117 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-30
+See [measured acceptance](professional-acceptance.md) for the latest completed
+native detection measurements and [validation pipeline](validation-pipeline.md)
+for exact-wheel verification, failed-run retention and runtime qualification.
+
+Last reviewed: 2026-09-12
+
+## Executable detection regression gate
+
+See [professional acceptance](professional-acceptance.md) for the installed-wheel
+CI matrix, external OWASP measurement, per-engine regression baseline, and the
+remaining limits on production effectiveness claims.
+
+`scripts/validate_detection.py` runs real Semgrep and Bandit binaries against
+the developer-labeled cases in `tests/fixtures/detection-regressions.json`.
+It checks request-to-SQL, SSRF, path traversal, and credential logging, including
+Flask, Django, FastAPI, keyword arguments, and async handlers. Each vulnerability
+class has positive and negative controls. The gate requires every expected
+detection, rejects false positives on the negative controls, and retains per-CWE
+precision/recall counts, detector versions, and corpus/rule digests. These small
+regression fixtures do not establish production detection rates.
+
+Semgrep now runs a fixed three attempts by default (`--semgrep-repetitions`,
+bounded to one through five). Every attempt must complete its Python inventory
+and native error checks, and normalized findings and engine versions must agree.
+All attempt summaries remain in `semgrep_stability`, including failures followed
+by successes. Per-case results describe the first attempt; a later success cannot
+replace them or turn the overall gate green. Summary digests include normalized
+classification and severity, not only finding counts. Timing is recorded but does
+not affect the equality check. This is a regression check, not a reliability SLA.
+
+The separate CodeQL gate compiles the bundled global taint queries and selected
+upstream queries against credential, LDAP, HTML, path and XPath flows. Positive
+findings must retain SARIF path traces. Controls cover identity helpers, real
+escaping, source-verified imported factories and bounded value proofs. All 15
+previously tracked mutation misses now pass as positive regressions, paired with
+safe overwrite controls. The current CodeQL corpus has **284 passing cases**,
+including paired string-provenance and selected-match controls. Future
+known-gap records must still reject unsafe constant-value proofs and cannot be
+counted as successful detections. CI requires both lanes
+through `detection-regressions` and retains their JSON results.
+
+The Semgrep rules no longer trust arbitrary function names containing `sanitize`,
+`redact`, or `allowlist`. A custom helper can therefore produce a candidate finding
+until its behavior is established by deeper analysis or an explicitly reviewed
+model. The built-in `werkzeug.utils.secure_filename` path model is tested against
+a fixed parent-directory example. Parameterized SQL and constant outbound URLs
+with request-derived query parameters are negative controls.
+
+```text
+python scripts/validate_detection.py --semgrep PATH_TO_SEMGREP --bandit PATH_TO_BANDIT --output .artifacts/detection/semgrep.json
+codeql pack ci src/py_security_suite/rules/codeql
+python scripts/validate_detection.py --codeql-only --codeql PATH_TO_CODEQL --output .artifacts/detection/codeql.json
+```
+
+The CodeQL lane was validated with CLI 2.26.4 and the checked-in query dependency
+lock. Package preparation is connected; detection uses the staged libraries.
+For product scans, select a profile containing CodeQL (such as `deep`), stage
+those locked dependencies under `tools.codeql.database_path/.codeql/packages`,
+alongside the approved `codeql/python-queries` pack. The bundled supplemental
+query pack is the default `tools.codeql.rules_path`. Production deployments must
+approve the updated rules and cache digests. Missing supplemental dependencies
+are an explicit readiness failure. A supplemental execution failure retains
+primary CodeQL findings and makes the tool incomplete.
+
+The CodeQL gate also tests native path/XPath flow refinement. A bounded evaluator
+handles pure integer arithmetic and a single comparison in conditional expressions
+whose selected branch is a string literal. Local SSA bindings must be unique,
+defined, non-escaping fast locals without phi inputs. Unsupported operations,
+large intermediates, unknown conditions, and other taint paths retain alerts.
+Path and XPath checks also use the bounded selected-match read proof: a literal
+arm must be the first matching arm, assign a constant, and reach the read without
+intervening writes. Unknown subjects and subsequent assignments retain alerts.
+The supplemental queries compare the original and refined native flows; an
+exclusion requires an explicit result showing no refined flow to any node at
+the same sink coordinates. No absence-of-results heuristic is used.
+
+XPath refinement also supports an apostrophe-rejection guard on the same SSA
+value and control-flow branch when that value occupies the sole, unconverted
+hole of a supported quoted attribute comparison. The value must have a known
+string origin. Bounded text provenance follows local assignments and requires
+every incoming definition at a branch join to be text. Request `getlist` elements
+qualify only when their local list has no mutation, method call or escape.
+Replacing every apostrophe with a quote-free literal also qualifies inside that
+same supported hole; partial replacement does not. An unrelated check, wrong branch, custom object, formatting
+conversion, unquoted hole or unsupported expression retains the native finding.
+This context proof does not establish general XPath sanitization. Developer
+controls and the [public measurements](validation-results.md) remain separate
+evidence, and passing regression ceilings does not establish accuracy acceptance.
+
+Live scans require complete extraction, successful invocations, unchanged assets,
+and an exact rule/file/line/column match. The original finding, resolved and
+redacted through the normal parser, and its native comparison record are retained
+in `evidence/codeql.json` under `native_flow_refinement`. Proof and evidence limits
+retain all original alerts when exceeded. Imported SARIF and local AST review
+hints do not authorize this refinement. This narrow model is not a proof about
+arbitrary Python reflection or unmodeled runtime behavior.
+
+Bandit and Semgrep reported native analysis errors also make the tool incomplete
+while preserving valid findings. The gate tests a mixture of malformed source and
+detectable vulnerabilities through the actual Bandit adapter; unit tests cover
+both adapters' partial-result contracts. Native inventory reconciliation also
+requires every maintained Python file in the private scan mirror to appear in the
+engine's analyzed-file inventory. Native errors and missing files make coverage
+incomplete. This verifies the engine's reported coverage, not the correctness of
+every analysis it performed. Diagnostics retain counts rather than raw scanner
+error contents.
+
+Semgrep dataflow fixpoint timeouts in `time.fixpoint_timeouts` also count as
+analysis failures, even with exit zero and an empty main error list. The
+completion gate rejects those runs, including scans with zero findings. See the
+[current acceptance qualification](professional-acceptance.md#current-qualification-native-dataflow-timeouts)
+for the observed intermittent timeout and the limits on earlier measurements.
 
 The benchmark semantic canonicalizer is regression-calibrated against the
 canonical-digest-pinned multilingual fixture at

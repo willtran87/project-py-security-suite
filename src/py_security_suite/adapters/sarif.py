@@ -58,6 +58,21 @@ _SUPPRESSION_STATUSES = {
 }
 
 
+def load_sarif_document(payload: str) -> dict[str, Any]:
+    """Bound large native SARIF separately from small governance documents.
+
+    A 1,230-case CodeQL report exceeds the general 250,000-node JSON limit.
+    Keep the depth, string, duplicate-key and numeric checks while allowing
+    at most two million nodes. Adapter file reads enforce their byte budget.
+    """
+    if len(payload) > 64 * 1024**2:
+        raise ValueError("SARIF exceeds the 64 MiB character limit")
+    document = strict_json_loads(payload, maximum_nodes=2_000_000)
+    if not isinstance(document, dict):
+        raise TypeError("SARIF output must be an object")
+    return document
+
+
 def parse_sarif_findings(
     payload: str,
     target: Path,
@@ -66,17 +81,22 @@ def parse_sarif_findings(
     default_area: str,
     default_impact: str,
     default_remediation: str,
+    generated_source_root: Path | None = None,
 ) -> list[Finding]:
-    document = strict_json_loads(payload)
-    if not isinstance(document, dict):
-        raise TypeError("SARIF output must be an object")
+    document = load_sarif_document(payload)
     findings: list[Finding] = []
     for run in _object_list(document.get("runs", []), "runs"):
         tool = _object(run.get("tool"))
         driver = _object(tool.get("driver"))
         extensions = _object_list(tool.get("extensions") or [], "tool extensions")
         ordered_rules = _ordered_rules(driver)
-        uri_bases = _object(run.get("originalUriBaseIds"))
+        uri_bases = dict(_object(run.get("originalUriBaseIds")))
+        if generated_source_root is not None and "%SRCROOT%" not in uri_bases:
+            # Native CodeQL omits absolute base IDs by default. Only the adapter
+            # that created the database may supply this independently known root.
+            uri_bases["%SRCROOT%"] = {
+                "uri": generated_source_root.resolve().as_uri().rstrip("/") + "/"
+            }
         artifacts = _object_list(run.get("artifacts") or [], "artifacts")
         thread_flow_locations = _object_list(
             run.get("threadFlowLocations") or [], "thread flow locations"
@@ -1853,8 +1873,8 @@ def _classifications(
         lowered = value.casefold()
         if "cwe-" in lowered:
             suffix = lowered.rsplit("cwe-", maxsplit=1)[-1]
-            if suffix.isdigit():
-                normalized.append(f"CWE-{suffix}")
+            if suffix.isascii() and suffix.isdigit():
+                normalized.append(f"CWE-{suffix.lstrip('0') or '0'}")
         elif value.upper().startswith(("OWASP", "MITRE")):
             normalized.append(value)
     return list(dict.fromkeys(normalized))

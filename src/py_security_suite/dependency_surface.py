@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 from .repository_file_policy import maintained_repository_files
@@ -52,17 +53,22 @@ _MANIFESTS: dict[str, frozenset[str]] = {
 }
 
 
-def dependency_surface_artifact(
-    target: Path,
-    tool_runs: list[ToolRun] | None = None,
-    derived_artifacts: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Inventory dependency ecosystems and prove their applicable analyzer coverage."""
-    manifests: dict[str, list[str]] = {name: [] for name in _MANIFESTS}
+@dataclass(frozen=True)
+class DependencyInventory:
+    """Manifest identities collected once inside the sealed source snapshot."""
+
+    root: Path
+    manifests: tuple[tuple[str, str, str], ...]
+    discovered: tuple[tuple[str, int], ...]
+
+
+def inventory_dependencies(target: Path) -> DependencyInventory:
+    manifests: list[tuple[str, str, str]] = []
+    discovered = dict.fromkeys(_MANIFESTS, 0)
     for path in maintained_repository_files(target):
         folded = path.name.casefold()
         for ecosystem, names in _MANIFESTS.items():
-            matches_pattern = (
+            matches = (
                 ecosystem == "python"
                 and folded.startswith("requirements")
                 and folded.endswith(".txt")
@@ -70,11 +76,54 @@ def dependency_surface_artifact(
                 ecosystem == "dotnet"
                 and path.suffix.casefold() in {".csproj", ".fsproj", ".vbproj"}
             )
-            if (folded in names or matches_pattern) and len(manifests[ecosystem]) < 200:
-                manifests[ecosystem].append(path.relative_to(target).as_posix())
-    manifests = {
-        ecosystem: sorted(paths) for ecosystem, paths in manifests.items() if paths
+            if folded not in names and not matches:
+                continue
+            discovered[ecosystem] += 1
+            if discovered[ecosystem] <= 200:
+                _, payload = read_regular_file(
+                    path,
+                    "dependency manifest",
+                    maximum_bytes=256 * 1024 * 1024,
+                    boundary=target,
+                )
+                manifests.append(
+                    (
+                        ecosystem,
+                        path.relative_to(target).as_posix(),
+                        hashlib.sha256(payload).hexdigest(),
+                    )
+                )
+    return DependencyInventory(
+        target.resolve(), tuple(sorted(manifests)), tuple(sorted(discovered.items()))
+    )
+
+
+def dependency_surface_artifact(
+    target: Path,
+    tool_runs: list[ToolRun] | None = None,
+    derived_artifacts: dict[str, Any] | None = None,
+    *,
+    inventory: DependencyInventory | None = None,
+) -> dict[str, Any]:
+    """Inventory dependency ecosystems and prove their applicable analyzer coverage."""
+    inventory = inventory or inventory_dependencies(target)
+    if inventory.root != target.resolve():
+        raise ValueError("dependency inventory belongs to a different snapshot")
+    manifests: dict[str, list[str]] = {}
+    digests: dict[str, str] = {}
+    for ecosystem, relative, digest in inventory.manifests:
+        manifests.setdefault(ecosystem, []).append(relative)
+        digests[relative] = digest
+    accounting = {
+        ecosystem: {
+            "discovered": count,
+            "analyzed": len(manifests.get(ecosystem, [])),
+            "omitted": max(0, count - 200),
+        }
+        for ecosystem, count in inventory.discovered
+        if count
     }
+    omitted = sum(item["omitted"] for item in accounting.values())
     completed = {
         run.tool: run for run in tool_runs or [] if run.status is ToolStatus.COMPLETED
     }
@@ -92,13 +141,7 @@ def dependency_surface_artifact(
             resolved_identity = _resolved_dependency_identity(
                 ecosystem, relative, paths
             )
-            _, payload = read_regular_file(
-                target / relative,
-                "dependency manifest",
-                maximum_bytes=256 * 1024 * 1024,
-                boundary=target,
-            )
-            manifest_sha256 = hashlib.sha256(payload).hexdigest()
+            manifest_sha256 = digests[relative]
             vulnerability_receipt = _vulnerability_receipt(
                 ecosystem,
                 relative,
@@ -164,13 +207,18 @@ def dependency_surface_artifact(
                 }
             )
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "analysis": "multi-ecosystem-dependency-surface",
         "manifests": manifests,
         "ecosystem_count": len(manifests),
         "coverage_evaluated": tool_runs is not None,
         "coverage": coverage,
-        "complete": tool_runs is not None and all(item["covered"] for item in coverage),
+        "inventory_counts": accounting,
+        "manifest_limit_per_ecosystem": 200,
+        "omitted_manifests": omitted,
+        "complete": tool_runs is not None
+        and not omitted
+        and all(item["covered"] for item in coverage),
     }
 
 
@@ -214,6 +262,41 @@ def _vulnerability_receipt(
     ):
         return receipt
     return None
+
+
+def validate_dependency_accounting(value: Any) -> None:
+    """Cross-check the inventory limit against completeness before publication."""
+    if value.get("schema_version") != "1.2":
+        return
+    counts = value["inventory_counts"]
+    manifests = value["manifests"]
+    if set(counts) != set(manifests) or value["ecosystem_count"] != len(manifests):
+        raise ValueError("dependency inventory ecosystem accounting differs")
+    for ecosystem, count in counts.items():
+        analyzed = len(manifests[ecosystem])
+        if (
+            count["analyzed"] != analyzed
+            or analyzed != min(count["discovered"], 200)
+            or count["omitted"] != count["discovered"] - analyzed
+        ):
+            raise ValueError("dependency inventory manifest accounting differs")
+    omitted = sum(count["omitted"] for count in counts.values())
+    expected = {
+        (ecosystem, path) for ecosystem, paths in manifests.items() for path in paths
+    }
+    observed = [(row["ecosystem"], row["manifest"]) for row in value["coverage"]]
+    complete = (
+        value["coverage_evaluated"]
+        and not omitted
+        and all(row["covered"] for row in value["coverage"])
+    )
+    if (
+        value["omitted_manifests"] != omitted
+        or set(observed) != expected
+        or len(observed) != len(expected)
+        or value["complete"] != complete
+    ):
+        raise ValueError("dependency inventory coverage accounting differs")
 
 
 def _coverage_basis(tool: str) -> str:

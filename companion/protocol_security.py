@@ -218,7 +218,12 @@ def _execute(case: dict[str, Any]) -> tuple[str, str]:
     status = "OK"
     try:
         if case["protocol"] == "grpc":
-            with grpc.insecure_channel(case["endpoint"]) as channel:
+            # This executor rejects every non-loopback endpoint in ``_endpoint``.
+            # The plaintext channel is intentionally confined to an ephemeral
+            # local adversarial-test server and never carries production traffic.
+            with grpc.insecure_channel(  # nosemgrep: python.grpc-insecure-channel
+                case["endpoint"]
+            ) as channel:
                 call = channel.unary_unary(
                     case["method"],
                     request_serializer=lambda value: value,

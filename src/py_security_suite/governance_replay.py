@@ -87,7 +87,7 @@ def _consume_remote_governance_replay(
         "ca": "PYSEC_GOVERNANCE_REPLAY_SERVICE_CA",
         "receipt_key": "PYSEC_GOVERNANCE_REPLAY_SERVICE_RECEIPT_KEY",
         "client_cert": "PYSEC_GOVERNANCE_REPLAY_SERVICE_CLIENT_CERT",
-        "client_key": "PYSEC_GOVERNANCE_REPLAY_SERVICE_CLIENT_KEY",
+        "client_key": "PYSEC_GOVERNANCE_REPLAY_SERVICE_CLIENT_KEY",  # pragma: allowlist secret
     }
     values = {
         name: environment.get(variable, "") for name, variable in required.items()

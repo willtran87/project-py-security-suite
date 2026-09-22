@@ -1,0 +1,368 @@
+{
+  "schema_version": "1.0",
+  "scope": "No regression from measured public baseline; not a production accuracy threshold.",
+  "source_sha256": "7426a8032bab8fc6bd054fad57f35dd1e1736075d1fde7e0ac0634083f0083bd",
+  "labels_sha256": "6396f37c97cfd0c018db3d8750095ce6c678a083f83620cfb3e88fe27a46bb0c",
+  "engines": {
+    "bandit": {
+      "CWE-22": {
+        "fp": 0,
+        "fn": 65
+      },
+      "CWE-328": {
+        "fp": 0,
+        "fn": 71
+      },
+      "CWE-330": {
+        "fp": 0,
+        "fn": 22
+      },
+      "CWE-501": {
+        "fp": 0,
+        "fn": 18
+      },
+      "CWE-502": {
+        "fp": 7,
+        "fn": 5
+      },
+      "CWE-601": {
+        "fp": 0,
+        "fn": 13
+      },
+      "CWE-611": {
+        "fp": 0,
+        "fn": 8
+      },
+      "CWE-614": {
+        "fp": 0,
+        "fn": 24
+      },
+      "CWE-643": {
+        "fp": 0,
+        "fn": 51
+      },
+      "CWE-78": {
+        "fp": 7,
+        "fn": 0
+      },
+      "CWE-79": {
+        "fp": 0,
+        "fn": 31
+      },
+      "CWE-89": {
+        "fp": 11,
+        "fn": 0
+      },
+      "CWE-90": {
+        "fp": 0,
+        "fn": 16
+      },
+      "CWE-94": {
+        "fp": 0,
+        "fn": 20
+      }
+    },
+    "semgrep": {
+      "CWE-22": {
+        "fp": 5,
+        "fn": 61
+      },
+      "CWE-328": {
+        "fp": 0,
+        "fn": 3
+      },
+      "CWE-330": {
+        "fp": 0,
+        "fn": 99
+      },
+      "CWE-501": {
+        "fp": 0,
+        "fn": 18
+      },
+      "CWE-502": {
+        "fp": 5,
+        "fn": 13
+      },
+      "CWE-601": {
+        "fp": 0,
+        "fn": 13
+      },
+      "CWE-611": {
+        "fp": 0,
+        "fn": 8
+      },
+      "CWE-614": {
+        "fp": 0,
+        "fn": 0
+      },
+      "CWE-643": {
+        "fp": 0,
+        "fn": 51
+      },
+      "CWE-78": {
+        "fp": 7,
+        "fn": 6
+      },
+      "CWE-79": {
+        "fp": 0,
+        "fn": 31
+      },
+      "CWE-89": {
+        "fp": 0,
+        "fn": 4
+      },
+      "CWE-90": {
+        "fp": 0,
+        "fn": 16
+      },
+      "CWE-94": {
+        "fp": 0,
+        "fn": 20
+      }
+    }
+  },
+  "review": "docs/professional-acceptance.md#reviewed-source-model-baseline-changes",
+  "protected_detections": {
+    "bandit": {
+      "CWE-330": [
+        "BenchmarkTest00027",
+        "BenchmarkTest00028",
+        "BenchmarkTest00029",
+        "BenchmarkTest00030",
+        "BenchmarkTest00031",
+        "BenchmarkTest00114",
+        "BenchmarkTest00115",
+        "BenchmarkTest00116",
+        "BenchmarkTest00117",
+        "BenchmarkTest00220",
+        "BenchmarkTest00221",
+        "BenchmarkTest00222",
+        "BenchmarkTest00223",
+        "BenchmarkTest00224",
+        "BenchmarkTest00225",
+        "BenchmarkTest00226",
+        "BenchmarkTest00227",
+        "BenchmarkTest00305",
+        "BenchmarkTest00308",
+        "BenchmarkTest00309",
+        "BenchmarkTest00381",
+        "BenchmarkTest00382",
+        "BenchmarkTest00383",
+        "BenchmarkTest00385",
+        "BenchmarkTest00473",
+        "BenchmarkTest00476",
+        "BenchmarkTest00556",
+        "BenchmarkTest00557",
+        "BenchmarkTest00558",
+        "BenchmarkTest00560",
+        "BenchmarkTest00561",
+        "BenchmarkTest00562",
+        "BenchmarkTest00563",
+        "BenchmarkTest00564",
+        "BenchmarkTest00621",
+        "BenchmarkTest00622",
+        "BenchmarkTest00625",
+        "BenchmarkTest00626",
+        "BenchmarkTest00627",
+        "BenchmarkTest00628",
+        "BenchmarkTest00688",
+        "BenchmarkTest00689",
+        "BenchmarkTest00690",
+        "BenchmarkTest00765",
+        "BenchmarkTest00766",
+        "BenchmarkTest00767",
+        "BenchmarkTest00770",
+        "BenchmarkTest00771",
+        "BenchmarkTest00772",
+        "BenchmarkTest00773",
+        "BenchmarkTest00774",
+        "BenchmarkTest00775",
+        "BenchmarkTest00859",
+        "BenchmarkTest00860",
+        "BenchmarkTest00863",
+        "BenchmarkTest00945",
+        "BenchmarkTest00946",
+        "BenchmarkTest00949",
+        "BenchmarkTest00950",
+        "BenchmarkTest00951",
+        "BenchmarkTest01040",
+        "BenchmarkTest01041",
+        "BenchmarkTest01042",
+        "BenchmarkTest01044",
+        "BenchmarkTest01045",
+        "BenchmarkTest01046",
+        "BenchmarkTest01047",
+        "BenchmarkTest01048",
+        "BenchmarkTest01049",
+        "BenchmarkTest01050",
+        "BenchmarkTest01128",
+        "BenchmarkTest01129",
+        "BenchmarkTest01130",
+        "BenchmarkTest01131",
+        "BenchmarkTest01185",
+        "BenchmarkTest01194",
+        "BenchmarkTest01199"
+      ],
+      "CWE-502": [
+        "BenchmarkTest00078",
+        "BenchmarkTest00164",
+        "BenchmarkTest00507",
+        "BenchmarkTest00510",
+        "BenchmarkTest00605",
+        "BenchmarkTest00657",
+        "BenchmarkTest00734",
+        "BenchmarkTest00735",
+        "BenchmarkTest00825",
+        "BenchmarkTest00898",
+        "BenchmarkTest00992",
+        "BenchmarkTest00993",
+        "BenchmarkTest01216"
+      ],
+      "CWE-89": [
+        "BenchmarkTest00099",
+        "BenchmarkTest00283",
+        "BenchmarkTest00284",
+        "BenchmarkTest00454",
+        "BenchmarkTest00455"
+      ],
+      "CWE-78": [
+        "BenchmarkTest00165",
+        "BenchmarkTest00166",
+        "BenchmarkTest00167",
+        "BenchmarkTest00168",
+        "BenchmarkTest00267",
+        "BenchmarkTest00268",
+        "BenchmarkTest00431",
+        "BenchmarkTest00432",
+        "BenchmarkTest00511",
+        "BenchmarkTest00606",
+        "BenchmarkTest00607",
+        "BenchmarkTest00899",
+        "BenchmarkTest01191"
+      ]
+    },
+    "semgrep": {
+      "CWE-328": [
+        "BenchmarkTest00054",
+        "BenchmarkTest00057",
+        "BenchmarkTest00058",
+        "BenchmarkTest00059",
+        "BenchmarkTest00060",
+        "BenchmarkTest00140",
+        "BenchmarkTest00141",
+        "BenchmarkTest00142",
+        "BenchmarkTest00143",
+        "BenchmarkTest00244",
+        "BenchmarkTest00248",
+        "BenchmarkTest00249",
+        "BenchmarkTest00250",
+        "BenchmarkTest00251",
+        "BenchmarkTest00319",
+        "BenchmarkTest00320",
+        "BenchmarkTest00321",
+        "BenchmarkTest00322",
+        "BenchmarkTest00323",
+        "BenchmarkTest00326",
+        "BenchmarkTest00327",
+        "BenchmarkTest00328",
+        "BenchmarkTest00329",
+        "BenchmarkTest00409",
+        "BenchmarkTest00410",
+        "BenchmarkTest00412",
+        "BenchmarkTest00482",
+        "BenchmarkTest00483",
+        "BenchmarkTest00484",
+        "BenchmarkTest00489",
+        "BenchmarkTest00580",
+        "BenchmarkTest00581",
+        "BenchmarkTest00583",
+        "BenchmarkTest00585",
+        "BenchmarkTest00586",
+        "BenchmarkTest00641",
+        "BenchmarkTest00642",
+        "BenchmarkTest00643",
+        "BenchmarkTest00646",
+        "BenchmarkTest00647",
+        "BenchmarkTest00707",
+        "BenchmarkTest00709",
+        "BenchmarkTest00713",
+        "BenchmarkTest00714",
+        "BenchmarkTest00715",
+        "BenchmarkTest00716",
+        "BenchmarkTest00796",
+        "BenchmarkTest00805",
+        "BenchmarkTest00806",
+        "BenchmarkTest00873",
+        "BenchmarkTest00874",
+        "BenchmarkTest00877",
+        "BenchmarkTest00973",
+        "BenchmarkTest00974",
+        "BenchmarkTest00975",
+        "BenchmarkTest00977",
+        "BenchmarkTest00978",
+        "BenchmarkTest01070",
+        "BenchmarkTest01077",
+        "BenchmarkTest01145",
+        "BenchmarkTest01146",
+        "BenchmarkTest01147",
+        "BenchmarkTest01148",
+        "BenchmarkTest01149",
+        "BenchmarkTest01182",
+        "BenchmarkTest01190",
+        "BenchmarkTest01197",
+        "BenchmarkTest01227"
+      ],
+      "CWE-614": [
+        "BenchmarkTest00064",
+        "BenchmarkTest00065",
+        "BenchmarkTest00066",
+        "BenchmarkTest00336",
+        "BenchmarkTest00494",
+        "BenchmarkTest00592",
+        "BenchmarkTest00593",
+        "BenchmarkTest00650",
+        "BenchmarkTest00651",
+        "BenchmarkTest00652",
+        "BenchmarkTest00718",
+        "BenchmarkTest00719",
+        "BenchmarkTest00720",
+        "BenchmarkTest00808",
+        "BenchmarkTest00885",
+        "BenchmarkTest00886",
+        "BenchmarkTest00980",
+        "BenchmarkTest00981",
+        "BenchmarkTest01085",
+        "BenchmarkTest01086",
+        "BenchmarkTest01087",
+        "BenchmarkTest01088",
+        "BenchmarkTest01177",
+        "BenchmarkTest01187"
+      ],
+      "CWE-22": [
+        "BenchmarkTest00085",
+        "BenchmarkTest00449",
+        "BenchmarkTest01179",
+        "BenchmarkTest01196"
+      ],
+      "CWE-78": [
+        "BenchmarkTest00166",
+        "BenchmarkTest00167",
+        "BenchmarkTest00168",
+        "BenchmarkTest00431",
+        "BenchmarkTest00432",
+        "BenchmarkTest00606",
+        "BenchmarkTest00607"
+      ],
+      "CWE-502": [
+        "BenchmarkTest00269",
+        "BenchmarkTest00270",
+        "BenchmarkTest00433",
+        "BenchmarkTest00827",
+        "BenchmarkTest00994"
+      ],
+      "CWE-89": [
+        "BenchmarkTest00454"
+      ]
+    }
+  }
+}

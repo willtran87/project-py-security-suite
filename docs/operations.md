@@ -1,5 +1,10 @@
 # Python Security Suite operations
 
+For release-wheel verification, durable acceptance evidence, runtime qualification
+and the scope of native resource measurements, see the
+[validation pipeline and diagrams](validation-pipeline.md). Completed detector
+measurements and remaining gaps are recorded in [measured acceptance](professional-acceptance.md).
+
 Last reviewed: 2026-08-26
 
 ## Operating model
@@ -37,6 +42,53 @@ All sidecars are written outside the sealed report. Inputs that can affect a
 decision are SHA-256-bound, and every derived view remains non-authoritative.
 For the complete command sequence, use
 [`examples/github-actions.yml`](../examples/github-actions.yml).
+
+## Scan progress and interruption
+
+```text
+pysec scan PATH_TO_PROJECT --config pysec.toml --output report --network-isolated --progress text
+pysec scan PATH_TO_PROJECT --config pysec.toml --output report --network-isolated --progress json
+```
+
+Progress is opt-in and goes to stderr. JSON emits one object per line containing
+`stage`, `state`, `elapsed_seconds`, and `tool`; it carries no findings, source
+paths, commands, or credentials. The ordinary final outcome remains on stdout.
+Ctrl+C requests graceful cancellation. Allow process teardown and report sealing
+to finish; completed evidence is retained with an `INCOMPLETE` outcome and exit
+code 2. Configure `execution.max_scan_seconds` for the same cooperative shutdown
+on deadline. Final integrity verification and publication are allowed to finish.
+
+Inventory traversal, hashing, and snapshot copying check stop requests between
+files and 1 MiB read chunks. A stop before the initial snapshot is sealed aborts
+the scan without publishing a report (CLI exit code 3); no scanner evidence
+exists at that point.
+Snapshot copies use bounded buffers and retain file identity and digest checks.
+
+Progress callbacks run on a separate daemon thread with at most 64 pending
+events. Slow consumers lose the oldest pending events; callback exceptions
+disable delivery. Shutdown drains progress for at most 250 ms, then discards
+pending events. An already-running callback cannot be forcibly interrupted by
+Python and must eventually return to release its thread. Library callbacks must
+be thread-safe; progress is best-effort and the returned result and sealed report
+are authoritative. Use `controlled_scan` to drain events at context exit, or
+`ScanControl.finish_progress()` when emitting events directly.
+
+Governed schema validation reports the first failure using the bundled schema
+location and failed keyword. Rejected values and instance property names are
+excluded from these diagnostics.
+
+Dependency surface schema 1.2 records discovered, analyzed, and omitted manifests
+for each ecosystem, with a limit of 200 retained manifests per ecosystem.
+Omissions prevent complete coverage and make the scan incomplete. Export the
+contract with `pysec schema dependency-surface-1.2`; schema 1.1 remains available
+for historical report verification. Adapter artifact filenames must have one
+producer; collisions fail before report publication instead of overwriting data.
+
+Source analysis reuses exact-content Python ASTs only within the current sealed
+snapshot, with at most 128 trees and 100,000 retained AST nodes. Source excerpts
+are limited to 50 lines and 500 characters per line; files over 2 MiB are not
+embedded. The excerpt cache retains at most 256 entries and 8 MiB of source bytes
+(the Python object overhead is additional). All caches are discarded at scan end.
 
 ## Prerequisites
 
@@ -1229,3 +1281,81 @@ For environments where the approval signer is a separate service, use
 `security-passport.json` externally, and populate version-compatible signature material using
 the documented passport layout before final verification. `--allow-unsigned`
 checks integrity only and is not a production authenticity control.
+
+## Recovering a report after rendering fails
+
+Before rendering, the suite saves completed scan inputs in a private sibling
+directory named `.REPORT.recovery-*`. Successful publication removes this
+temporary checkpoint. If rendering or publication fails, the error identifies
+the retained checkpoint. Regenerate the report into a new output directory:
+
+```text
+pysec recover-report PATH/TO/.REPORT.recovery-ID --output recovered-report
+pysec verify-report recovered-report
+```
+
+Recovery uses the saved findings, tool runs, policy outcome, and derived evidence;
+it does not run scanners or reread the target repository. The original scan ID
+and timestamps remain unchanged. The regenerated report goes through the normal
+artifact validation, permission hardening, checksum verification, and atomic
+publication. An existing output directory is never overwritten by recovery.
+
+Checkpoints are explicitly incomplete and are not valid reports or attestations.
+The input checksum detects accidental corruption; it is not an authenticity
+signature. Use checkpoints only from your trusted scan workspace. Recovery
+requires the same suite version and checkpoint schema, and rejects malformed
+model fields and unsafe diagnostic names. Checkpoints have a 128 MiB serialized
+size limit. Interrupted checkpoint writes are rejected on recovery.
+
+Treat retained checkpoints as sensitive scan evidence. They include diagnostics
+only when evidence capture was enabled. Recovery preserves its source checkpoint;
+remove it according to your workspace retention policy after verifying the
+regenerated report. Checkpoints are not covered by the published-report purge
+command.
+
+If removal of a checkpoint, staging directory, backup, or publication lock fails,
+the suite reports a cleanup warning with the retained path. A verified report
+that was already published remains a successful publication; cleanup does not
+replace its policy outcome or mask an earlier rendering error. Review retained
+paths before removing them, particularly stale publication locks.
+
+## Measuring complete scan performance
+
+For native Semgrep qualification, `scripts/qualify_semgrep.py` records separate
+`identity_checks` and `native_invocations` durations. Use them to distinguish
+runtime verification cost from scan cost. Each repetition must reconcile the
+complete Python inventory and stable findings; identity checks remain enabled
+before and after each scan. Attempts checkpoint into unique run archives.
+See the [validation pipeline](validation-pipeline.md) for bytecode isolation,
+interruption behavior and evidence aggregation, and the
+[production evaluation work package](production-evaluation.md) for the remaining
+capacity and deployment acceptance measurements.
+
+```text
+python scripts/benchmark_full_scan.py --samples 3 --output .artifacts/full-scan-benchmark.json
+```
+
+The benchmark exercises many small files, oversized Python source, a large
+finding set, and cancellation during scanner execution. `--scale 1` uses 250
+extra files, a 3 MiB source file, and 500 findings; scales 1–8 are available.
+Use `--case many-findings` to isolate one workload. Each sample starts a fresh
+process and runs snapshotting, orchestration, analysis, all report renderers,
+sealing, publication, and an additional report verification.
+
+Results include individual stage durations, median and nearest-rank p95 total
+duration, sampled peak process-tree RSS, report bytes, and cancellation latency
+through report publication. RSS is sampled every 20 ms, so very short memory
+spikes may be missed. One sample is a smoke check; use repeated samples for
+comparisons. These workloads use explicitly synthetic scanner adapters and fixed
+local subprocesses; they measure engine scaling, not third-party scanner speed
+or detection accuracy. Their diagnostic scan outcomes remain `INCOMPLETE`.
+
+The regression limits are 50 seconds per completed sample, 1 GiB peak RSS,
+128 MiB of report artifacts, and 10 seconds from cancellation to report
+publication, with a 60-second outer subprocess timeout. CI runs three samples
+per workload and retains the JSON alongside existing performance evidence.
+
+Report JSON is written incrementally. Recovery inputs are serialized and hashed
+in one pass, with byte, nesting, node-count, numeric, and string limits enforced
+during serialization. Model conversion avoids redundant deep copies, while the
+normal artifact validation and report verification remain enabled.

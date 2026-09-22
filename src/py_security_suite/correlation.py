@@ -66,7 +66,7 @@ _ENGINE_FAMILIES = {
     "ruff-format": "ruff",
     "gitleaks": "gitleaks",
     "trufflehog": "trufflehog",
-    "detect-secrets": "detect-secrets",
+    "detect-secrets": "detect-secrets",  # pragma: allowlist secret
     "osv-scanner": "osv",
     "cyclonedx-py": "cyclonedx",
 }

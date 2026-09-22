@@ -8,7 +8,7 @@ ARG OSV_PYPI_DATABASE_SHA256
 LABEL org.opencontainers.image.title="Python Security Suite scanner bundle"
 LABEL org.opencontainers.image.description="Offline runtime for the Python Security Suite standard profile"
 LABEL io.pysec.bandit.version="1.9.4"
-LABEL io.pysec.semgrep.version="1.170.0"
+LABEL io.pysec.semgrep.version="1.175.0"
 LABEL io.pysec.detect-secrets.version="1.5.0"
 LABEL io.pysec.osv-scanner.version="${OSV_SCANNER_VERSION}"
 LABEL io.pysec.sbom.path="/opt/pysec-bundle/python-sbom.cdx.json"
@@ -32,6 +32,7 @@ COPY containers/scanner/pysec.toml /opt/pysec-suite/pysec.toml
 
 RUN python - <<'PY'
 import hashlib
+import ast
 import importlib.metadata
 import json
 import pathlib
@@ -47,7 +48,23 @@ project_document = tomllib.loads(
 )
 project = project_document["project"]
 root_name = canonicalize_name(project["name"])
-root_version = project["version"]
+version_tree = ast.parse(
+    pathlib.Path("/opt/pysec-suite/src/py_security_suite/version.py").read_text(
+        encoding="utf-8"
+    )
+)
+root_version = ""
+for statement in version_tree.body:
+    if (
+        isinstance(statement, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "__version__" for target in statement.targets)
+        and isinstance(statement.value, ast.Constant)
+        and isinstance(statement.value.value, str)
+    ):
+        root_version = statement.value.value
+        break
+if not root_version:
+    raise SystemExit("package version authority is unavailable")
 root_ref = f"pkg:pypi/{root_name}@{root_version}"
 distributions = sorted(
     (
@@ -189,6 +206,7 @@ target = pathlib.Path("/opt/osv-db/osv-scanner/PyPI/all.zip")
 digest = hashlib.sha256(target.read_bytes()).hexdigest()
 if len(expected) != 64 or digest != expected:
     raise SystemExit(f"PyPI OSV database checksum mismatch: {digest} != {expected}")
+target.chmod(0o444)
 pathlib.Path("/opt/pysec-bundle/osv-pypi-database.sha256").write_text(
     f"{digest}  /opt/osv-db/osv-scanner/PyPI/all.zip\n",
     encoding="utf-8",
@@ -197,6 +215,14 @@ PY
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN python -m pip freeze --all | sort > /opt/pysec-bundle/python-packages.txt
+
+# Runtime callers deliberately use their host UID so bind-mounted evidence is
+# not left owned by root. BuildKit does not guarantee a portable source mode
+# for named-context copies, so every governed runtime asset must be explicitly
+# traversable and readable by an otherwise unknown UID.
+RUN chmod 0555 /opt /opt/osv-db /opt/osv-db/osv-scanner /opt/osv-db/osv-scanner/PyPI \
+    /opt/pysec-bundle \
+    && chmod 0444 /opt/osv-db/osv-scanner/PyPI/all.zip /opt/pysec-bundle/*
 
 RUN bandit --version \
     && semgrep --version \

@@ -19,6 +19,7 @@ from py_security_suite.models import ToolRun, ToolStatus
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.requirements_coverage import (
     _policy_catalogs,
+    _replay_assertion,
     security_requirements_coverage_artifact,
 )
 from py_security_suite.strict_json import canonical_bytes
@@ -26,6 +27,18 @@ from tests.deployment_authority import authority_environment, operation_receipt
 
 
 class SecurityRequirementsCoverageTests(unittest.TestCase):
+    def test_replay_assertion_compares_numeric_threshold(self) -> None:
+        artifact = {"coverage": 95}
+        assertion = {
+            "artifact": "coverage.json",
+            "sha256": hashlib.sha256(canonical_bytes(artifact)).hexdigest(),
+            "pointer": "/coverage",
+            "operator": "gte",
+            "expected": 90,
+        }
+
+        self.assertTrue(_replay_assertion(assertion, {"coverage.json": artifact}))
+
     def test_schema_1_1_catalog_registry_accepts_pinned_aisvs_and_future_catalogs(
         self,
     ) -> None:

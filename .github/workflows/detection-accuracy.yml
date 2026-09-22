@@ -1,0 +1,129 @@
+name: Source-security accuracy acceptance
+
+on:
+  workflow_call:
+    inputs:
+      wheel_artifact:
+        description: Optional exact builder artifact containing one wheel
+        type: string
+        default: ""
+      require_accuracy:
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      require_accuracy:
+        description: Enforce the project accuracy targets
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: detection-accuracy-${{ github.workflow }}-${{ github.ref }}-${{ inputs.wheel_artifact || 'candidate' }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    name: Pinned external Python detection benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OWASP-Benchmark/BenchmarkPython
+          ref: f1291485808b66e20ddb6b01b10dc71b3df8c8ba # pragma: allowlist secret - public corpus revision
+          path: .artifacts/owasp-benchmark-python
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+      - name: Install locked verification and scanner dependencies
+        run: |
+          uv sync --locked --python 3.13
+          uv sync --locked --project containers/scanner --python 3.13
+      - name: Download the exact release candidate
+        if: inputs.wheel_artifact != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.wheel_artifact }}
+          path: .artifacts/detection-wheel
+      - name: Build a candidate when no release artifact was supplied
+        if: inputs.wheel_artifact == ''
+        run: uv build --wheel --no-sources --out-dir .artifacts/detection-wheel
+      - name: Install the candidate into an isolated environment
+        run: |
+          set -euo pipefail
+          wheels=("$PWD"/.artifacts/detection-wheel/*.whl)
+          test "${#wheels[@]}" -eq 1
+          test -f "${wheels[0]}"
+          printf 'DETECTION_WHEEL=%s\n' "${wheels[0]}" >> "$GITHUB_ENV"
+          uv export --frozen --no-dev --no-emit-project --output-file .artifacts/detection-requirements.txt
+          uv venv "$RUNNER_TEMP/detection-wheel" --python 3.13
+          uv pip install --python "$RUNNER_TEMP/detection-wheel/bin/python" --require-hashes -r .artifacts/detection-requirements.txt
+          uv pip install --python "$RUNNER_TEMP/detection-wheel/bin/python" --no-deps "${wheels[0]}"
+      - name: Measure installed Bandit and Semgrep adapter behavior
+        run: |
+          "$RUNNER_TEMP/detection-wheel/bin/python" -I scripts/validate_wheel_detection.py \
+            --wheel "$DETECTION_WHEEL" --mode benchmark \
+            --receipt .artifacts/benchmark/external-wheel.json -- \
+            --source .artifacts/owasp-benchmark-python \
+            --lock tests/fixtures/external-benchmark.lock.json \
+            --baseline tests/fixtures/external-benchmark.baseline.json \
+            --bandit "$PWD/containers/scanner/.venv/bin/bandit" \
+            --semgrep "$PWD/containers/scanner/.venv/bin/semgrep" \
+            --output .artifacts/benchmark/external.json
+      - name: Qualify fixed native Semgrep repetitions on the external corpus
+        run: |
+          uv run --frozen python scripts/qualify_semgrep.py \
+            --source .artifacts/owasp-benchmark-python \
+            --semgrep "$PWD/containers/scanner/.venv/bin/semgrep" \
+            --rules src/py_security_suite/rules/python-security.yml \
+            --output .artifacts/benchmark/semgrep-repeatability.json
+      - name: Prepare verified CodeQL for the source-security benchmark
+        env:
+          CODEQL_SHA256: d372d54345e058fe6f7ff8074acd155522fff6770b8d72ee1371ea89deafa193 # pragma: allowlist secret
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            --output "$RUNNER_TEMP/codeql.zip" \
+            https://github.com/github/codeql-cli-binaries/releases/download/v2.26.4/codeql-linux64.zip
+          printf '%s  %s\n' "$CODEQL_SHA256" "$RUNNER_TEMP/codeql.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/codeql.zip" -d "$RUNNER_TEMP/codeql-cli"
+          "$RUNNER_TEMP/codeql-cli/codeql/codeql" pack ci src/py_security_suite/rules/codeql
+          "$RUNNER_TEMP/codeql-cli/codeql/codeql" pack download codeql/python-queries@1.8.7
+          mkdir -p "$RUNNER_TEMP/codeql-home/.codeql"
+          cp -R "$HOME/.codeql/packages" "$RUNNER_TEMP/codeql-home/.codeql/packages"
+      - name: Measure three engines and evaluate accuracy targets
+        env:
+          REQUIRE_ACCURACY: ${{ inputs.require_accuracy }}
+        run: |
+          set -euo pipefail
+          accuracy_args=()
+          if [ "$REQUIRE_ACCURACY" = true ]; then accuracy_args+=(--require-accuracy); fi
+          "$RUNNER_TEMP/detection-wheel/bin/python" -I scripts/validate_wheel_detection.py \
+            --wheel "$DETECTION_WHEEL" --mode benchmark \
+            --receipt .artifacts/benchmark/source-security-wheel.json -- \
+            --source .artifacts/owasp-benchmark-python \
+            --lock tests/fixtures/external-benchmark.lock.json \
+            --baseline tests/fixtures/external-benchmark-source-security.baseline.json \
+            --accuracy-policy tests/fixtures/external-benchmark.accuracy-policy.json \
+            --bandit "$PWD/containers/scanner/.venv/bin/bandit" \
+            --semgrep "$PWD/containers/scanner/.venv/bin/semgrep" \
+            --codeql "$RUNNER_TEMP/codeql-cli/codeql/codeql" \
+            --codeql-runner "$PWD/containers/scanner/.venv/bin/run-codeql" \
+            --codeql-home "$RUNNER_TEMP/codeql-home" \
+            --output .artifacts/benchmark/source-security.json "${accuracy_args[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: external-detection-benchmark-${{ inputs.wheel_artifact || 'candidate' }}
+          path: |
+            .artifacts/benchmark
+            .artifacts/detection-wheel/*.whl
+          if-no-files-found: error
+

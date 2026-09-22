@@ -7,6 +7,7 @@ import marshal
 import pytest
 
 from py_security_suite.bytecode_analysis import analyze_python_bytecode
+from py_security_suite import bytecode_parser_worker
 
 
 def _pyc(source: str) -> bytes:
@@ -52,10 +53,25 @@ def test_bytecode_analysis_normalizes_malformed_code_object_system_errors() -> N
     payload = base64.b64decode(
         "8w0NCgAAAAAAAAAAAAAAAOMAAAAAAAAAbG9jYXRpb25zAAAAAfMcAAAAlQBTAFMBSwBy"
         "J1wBIgBTAjUBAAAAAAAAIABnASkD6QAAAABO2gExKQLaBGpzb27aBGV2YWypAPMAAAAA"
-        "2gxmdXp6X3NlZWQucHnaCDxtb2R1bGU+cgkAAAABAAAAcw8AAADwAwEBAdsAC9kABIBT"
+        "2gxmdXp6X3NlZWQucHnaCDxtb2R1bGU+cgkAAAABAAAAcw8AAADwAwEBAdsAC9kABIBT"  # pragma: allowlist secret
         "hQlyBwAAAA=="
     )
     payload = importlib.util.MAGIC_NUMBER + payload[4:]
 
     with pytest.raises(ValueError, match="marshal payload is invalid"):
         analyze_python_bytecode(payload)
+
+
+def test_bytecode_worker_validates_argv_and_emits_bounded_json(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(ValueError, match="requires one path"):
+        monkeypatch.setattr("sys.argv", ["bytecode-parser-worker"])
+        bytecode_parser_worker.main()
+
+    payload = tmp_path / "fixture.pyc"
+    payload.write_bytes(_pyc("import json\n"))
+    monkeypatch.setattr("sys.argv", ["bytecode-parser-worker", str(payload)])
+
+    assert bytecode_parser_worker.main() == 0
+    assert '"module-import","json"' in capsys.readouterr().out

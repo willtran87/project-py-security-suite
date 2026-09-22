@@ -179,8 +179,8 @@ def read_regular_file(
         label,
         maximum_bytes=maximum_bytes,
         boundary=boundary,
-    ) as (resolved, handle, _):
-        payload = handle.read(maximum_bytes + 1)
+    ) as (resolved, handle, observed_size):
+        payload = handle.read(min(maximum_bytes, observed_size) + 1)
         if len(payload) > maximum_bytes:
             raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
         return resolved, payload

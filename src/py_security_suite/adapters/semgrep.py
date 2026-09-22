@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+import re
 from typing import Any
 
 from ..execution import CommandEnvironment
@@ -14,12 +15,36 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
-from .base import ScannerAdapter
+from .base import AdapterResult, ScannerAdapter
+from .coverage import native_coverage, reconcile_coverage
+from .staging import maintained_files, python_scan_tree
 from .common import map_confidence, map_severity, string_list
+
+
+SEMGREP_JOBS = 2
 
 
 class SemgrepAdapter(ScannerAdapter):
     name = "semgrep"
+    partial_exit_codes = frozenset({3})
+
+    def run(self, target: Path) -> AdapterResult:
+        with python_scan_tree(target) as mirror:
+            return super().run(mirror)
+
+    def coverage_inventory(self, target: Path) -> tuple[str, ...]:
+        return tuple(
+            path.relative_to(target.resolve()).as_posix()
+            for path in maintained_files(target, frozenset({".py"}))
+        )
+
+    def coverage_assessment(
+        self, payload: str, target: Path, expected: tuple[str, ...]
+    ) -> dict[str, object]:
+        return reconcile_coverage(payload, target, expected, semgrep=True)
+
+    def analysis_coverage(self, payload: str) -> dict[str, int]:
+        return native_coverage(payload, semgrep=True)
 
     def environment(self) -> CommandEnvironment:
         temporary_root = Path(tempfile.gettempdir()) / "pysec-semgrep"
@@ -53,6 +78,8 @@ class SemgrepAdapter(ScannerAdapter):
             "--metrics=off",
             "--disable-version-check",
             "--strict",
+            "--no-git-ignore",
+            f"--jobs={SEMGREP_JOBS}",
             "--exclude",
             ".artifacts",
             "--exclude",
@@ -78,6 +105,7 @@ class SemgrepAdapter(ScannerAdapter):
         if not isinstance(results, list):
             raise TypeError("results must be a list")
         findings: list[Finding] = []
+        governed_origins: dict[str, str] = {}
         for result in results:
             if not isinstance(result, dict):
                 raise TypeError("Semgrep result must be an object")
@@ -91,7 +119,13 @@ class SemgrepAdapter(ScannerAdapter):
             start = result.get("start") or {}
             end = result.get("end") or {}
             line = _line(start)
-            rule_id = str(result.get("check_id") or "semgrep.unknown")
+            rule_id = _stable_rule_id(result, metadata)
+            native_rule_id = str(result.get("check_id") or "semgrep.unknown")
+            previous_origin = governed_origins.setdefault(rule_id, native_rule_id)
+            if previous_origin != native_rule_id:
+                raise ValueError(
+                    f"Semgrep governed rule ID {rule_id!r} has multiple native origins"
+                )
             title = str(extra.get("message") or rule_id)
             finding_id, fingerprint = finding_identity(
                 tool=self.name,
@@ -164,3 +198,14 @@ def _classifications(metadata: dict[str, Any]) -> list[str]:
 def _safe_uri(value: Any) -> str | None:
     text = str(value or "")
     return text if text.startswith(("https://", "http://")) else None
+
+
+_RULE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,127}$")
+
+
+def _stable_rule_id(result: dict[str, Any], metadata: dict[str, Any]) -> str:
+    """Prefer an author-governed ID over Semgrep's config-path-qualified ID."""
+    governed = metadata.get("pysec_rule_id")
+    if isinstance(governed, str) and _RULE_ID.fullmatch(governed):
+        return governed
+    return str(result.get("check_id") or "semgrep.unknown")

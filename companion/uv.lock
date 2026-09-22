@@ -1195,7 +1195,6 @@ wheels = [
 
 [[package]]
 name = "py-security-suite"
-version = "0.1.0"
 source = { editable = "../" }
 dependencies = [
     { name = "cryptography" },
@@ -1261,6 +1260,7 @@ dev = [
     { name = "hypothesis-jsonschema", specifier = ">=0.23,<0.24" },
     { name = "mutmut", specifier = ">=3.7,<4" },
     { name = "mypy", specifier = ">=1.17,<3" },
+    { name = "packaging", specifier = ">=24,<27" },
     { name = "pip-audit", specifier = ">=2.9,<3" },
     { name = "pyfakefs", specifier = ">=5.9,<7" },
     { name = "pyright", specifier = "==1.1.411" },

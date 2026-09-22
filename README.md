@@ -25,7 +25,7 @@ creates a GitHub-friendly report artifact.
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
-| Suite assurance | Exact 152-boundary dependency graph with one frozen seven-module bootstrap SCC; mypy plus a pinned strict Pyright gate over 32 production trust-boundary modules and 12 assurance scripts; 49 security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
+| Suite assurance | Exact 164-boundary dependency graph with one frozen seven-module bootstrap SCC; zero-slack file/function/decision debt ceilings that must tighten with every reduction; Mypy over the full source surface plus a strict 214-module production contract, and a pinned strict Pyright gate over 45 production trust-boundary modules and 12 assurance scripts; 50 strengthened security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
 
 Key trust properties:
 
@@ -74,6 +74,14 @@ Markdown is the canonical documentation format:
 - [Change history](CHANGELOG.md)
 
 ## Solution overview
+
+The [validation pipeline and diagrams](docs/validation-pipeline.md) explain how
+native regressions, exact-wheel accuracy and retained acceptance evidence support
+release decisions. [Measured acceptance](docs/professional-acceptance.md) records
+completed results and remaining detection limits.
+The [generated validation results](docs/validation-results.md) bind current local
+measurements to their evidence digests. The [production evaluation work package](docs/production-evaluation.md)
+records the independent review and operating measurements still required.
 
 ```mermaid
 flowchart LR
@@ -713,7 +721,10 @@ uv run python -m pytest
 - `detect-secrets`
 - `osv-scanner` plus a preloaded offline vulnerability database
 
-The stable `quick` and `standard` profiles retain their original contracts.
+The `quick` profile retains its lightweight contract. The default `standard`
+profile additionally emits bounded code-health, static-architecture,
+architecture-history, and structural-synthesis evidence so architecture and
+maintainability gaps are visible without opting into a release profile.
 Use `extended`, `deep`, `supply-chain`, `artifact`, `quality`, `iac-deep`, `runtime`,
 `governance`, `repo-health`, `repo`, or `comprehensive` to select additional
 perspectives.

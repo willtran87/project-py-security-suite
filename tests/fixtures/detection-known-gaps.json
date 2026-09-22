@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0",
+  "scope": "All 15 previously recorded mutation-flow misses have been promoted to detection-regressions.json with paired overwrite controls. Future unresolved misses must retain positive labels here.",
+  "cases": []
+}

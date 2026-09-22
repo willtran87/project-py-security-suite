@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Tag = "py-security-suite-scanners:0.1.0",
+    [string]$Tag = "",
     [Parameter(Mandatory = $true)]
     [string]$OsvDatabaseDirectory,
     [string]$EvidenceDirectory = ""
@@ -8,6 +8,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$versionLine = Select-String -LiteralPath (Join-Path $workspace "src\py_security_suite\version.py") `
+    -Pattern '^__version__ = "([0-9A-Za-z.+!-]+)"$'
+if ($versionLine.Matches.Count -ne 1) {
+    throw "Package version authority is invalid"
+}
+$suiteVersion = $versionLine.Matches[0].Groups[1].Value
+if (-not $Tag) {
+    $Tag = "py-security-suite-scanners:$suiteVersion"
+}
 $dockerfile = Join-Path $workspace "containers\scanner\Dockerfile"
 $databaseDirectory = (Resolve-Path -LiteralPath $OsvDatabaseDirectory).Path
 $database = Join-Path $databaseDirectory "osv-pypi-all.zip"
@@ -53,6 +62,21 @@ docker build `
 
 if ($LASTEXITCODE -ne 0) {
     throw "Scanner image build failed with exit code $LASTEXITCODE"
+}
+
+# Exercise the exact identity model used by CI. This is intentionally neither
+# root nor the image's declared user and catches unreadable COPY assets before
+# the expensive end-to-end scan begins.
+$runtimeProbe = docker run --rm --network none --read-only --user 42424:42424 `
+    --entrypoint python $Tag -c (
+        "from pathlib import Path; " +
+        "assets = (Path('/opt/osv-db/osv-scanner/PyPI/all.zip'), " +
+        "Path('/opt/pysec-bundle/python-sbom.cdx.json')); " +
+        "assert all(path.is_file() and path.stat().st_size > 0 for path in assets); " +
+        "[path.open('rb').read(1) for path in assets]; print('arbitrary-uid-assets-readable')"
+    )
+if ($LASTEXITCODE -ne 0 -or ($runtimeProbe -join "`n") -notmatch "arbitrary-uid-assets-readable") {
+    throw "Scanner image arbitrary-UID governed-asset probe failed"
 }
 
 $imageId = (docker image inspect $Tag --format "{{.Id}}").Trim()

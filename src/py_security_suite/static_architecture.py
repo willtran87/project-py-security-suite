@@ -19,6 +19,8 @@ _SKIP = frozenset(
         ".venv",
         "build",
         "dist",
+        "framework-canaries",
+        "mutants",
         "node_modules",
         "tests",
     }
@@ -972,10 +974,17 @@ def _imports(module: str, is_package: bool, tree: ast.AST) -> set[str]:
             else:
                 base = node.module or ""
             if base:
-                values.add(base)
-                values.update(
-                    f"{base}.{alias.name}" for alias in node.names if alias.name != "*"
-                )
+                imported_names = [
+                    alias.name for alias in node.names if alias.name != "*"
+                ]
+                # Resolve the imported name first. If it is a local submodule,
+                # this retains the precise edge; if it is a symbol, the local
+                # destination resolver naturally falls back to ``base``. Adding
+                # both eagerly invents a parent-package dependency for
+                # ``from . import submodule`` and disagrees with Tach.
+                values.update(f"{base}.{name}" for name in imported_names)
+                if not imported_names:
+                    values.add(base)
     return values
 
 

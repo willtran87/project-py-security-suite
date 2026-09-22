@@ -12,13 +12,29 @@ import sysconfig
 import tempfile
 import threading
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
-from collections.abc import Iterator, Mapping
 
+from .process_containment import (
+    apply_windows_job_limits as _apply_windows_job_limits,
+    close_windows_handle as _close_windows_handle,
+)
+from .platform_runtime import (
+    _darwin_shared_cache_dependency,
+    _darwin_system_runtime_record,
+    _native_runtime_components,
+)
+from .process_memory import process_tree_resident_bytes as _process_tree_resident_bytes
+from .scan_control import ScanInterrupted, StopCause, stop_cause, stop_reason
 from .path_safety import read_regular_file
+from .governed_assets import (
+    sha256_file as sha256_file,
+    governed_asset_sha256 as governed_asset_sha256,
+    sealed_governed_assets as sealed_governed_assets,
+)
+from .command_environment import isolated_environment as isolated_environment
+from .command_environment import isolate_python_command, private_runtime_environment
 from .execution_policy import validate_governed_command_input
 from .diagnostic_safety import (
     sanitize_diagnostic as sanitize_diagnostic,
@@ -102,6 +118,8 @@ class RawExecution:
     resident_memory_limit_exceeded: bool = False
     resource_limits_enforced: tuple[str, ...] = ()
     resource_limit_errors: tuple[str, ...] = ()
+    stop_reason: str = ""
+    stop_cause: StopCause | None = None
 
 
 @dataclass(slots=True)
@@ -112,6 +130,7 @@ class CommandEnvironment:
     sandbox_runtime_closure_sha256: str = ""
     max_scratch_bytes: int = 512 * 1024**2
     max_resident_memory_bytes: int = 8 * 1024**3
+    auxiliary_executables: tuple[tuple[str, str], ...] = ()
 
 
 class _BoundedPipeCollector:
@@ -153,164 +172,11 @@ class _BoundedPipeCollector:
         return bytes(self._payload)
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def governed_asset_sha256(path: Path) -> str:
-    """Digest one regular file or an exact, symlink-free asset directory tree."""
-    expanded = path.expanduser()
-    if expanded.is_symlink():
-        raise ValueError("governed scanner asset is a symbolic link")
-    resolved = expanded.resolve()
-    if resolved.is_file():
-        if resolved.stat().st_size > 16 * 1024**3:
-            raise ValueError("governed scanner asset file exceeds 16 GiB")
-        return sha256_file(resolved)
-    if not resolved.is_dir():
-        raise ValueError("governed scanner asset is not a regular file or directory")
-    records: list[dict[str, object]] = []
-    total_bytes = 0
-    for root, directories, names in os.walk(resolved, followlinks=False):
-        root_path = Path(root)
-        directories.sort()
-        for directory in directories:
-            if (root_path / directory).is_symlink():
-                raise ValueError("governed scanner asset contains a symbolic link")
-        for name in sorted(names):
-            candidate = root_path / name
-            if candidate.is_symlink():
-                raise ValueError("governed scanner asset contains a symbolic link")
-            _, payload = read_regular_file(
-                candidate,
-                "governed scanner asset",
-                maximum_bytes=2 * 1024**3,
-                boundary=resolved,
-            )
-            total_bytes += len(payload)
-            if len(records) >= 1_000_000 or total_bytes > 16 * 1024**3:
-                raise ValueError("governed scanner asset tree exceeds its limits")
-            records.append(
-                {
-                    "path": candidate.relative_to(resolved).as_posix(),
-                    "size_bytes": len(payload),
-                    "sha256": hashlib.sha256(payload).hexdigest(),
-                }
-            )
-    records.sort(key=lambda item: str(item["path"]))
-    return hashlib.sha256(canonical_bytes(records)).hexdigest()
-
-
-@contextmanager
-def sealed_governed_assets(
-    assets: Mapping[str, Path], expected_digests: Mapping[str, str]
-) -> Iterator[dict[str, Path]]:
-    """Copy governed scanner assets into an immutable, per-run private root.
-
-    The scanner receives only the returned paths. The copy is made from
-    race-resistant regular-file reads, is verified against the digest observed
-    during preflight, and is re-verified before and after scanner execution.
-    """
-    if not assets:
-        yield {}
-        return
-    temporary_root = Path(tempfile.mkdtemp(prefix="pysec-governed-assets-"))
-    copies: dict[str, Path] = {}
-    try:
-        for label, source in sorted(assets.items()):
-            expected = expected_digests.get(label, "")
-            if not expected:
-                raise ValueError(f"governed {label} asset has no preflight digest")
-            resolved = source.expanduser().resolve()
-            destination = temporary_root / label
-            if resolved.is_file():
-                _, payload = read_regular_file(
-                    resolved,
-                    f"governed {label} asset snapshot",
-                    maximum_bytes=2 * 1024**3,
-                )
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                with destination.open("xb") as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.chmod(destination, 0o400)
-            elif resolved.is_dir():
-                destination.mkdir(mode=0o700)
-                files = 0
-                total_bytes = 0
-                for root, directories, names in os.walk(resolved, followlinks=False):
-                    root_path = Path(root)
-                    relative_root = root_path.relative_to(resolved)
-                    for directory in sorted(directories):
-                        candidate = root_path / directory
-                        if candidate.is_symlink():
-                            raise ValueError(
-                                f"governed {label} asset contains a symbolic link"
-                            )
-                        (destination / relative_root / directory).mkdir(mode=0o700)
-                    for name in sorted(names):
-                        candidate = root_path / name
-                        if candidate.is_symlink():
-                            raise ValueError(
-                                f"governed {label} asset contains a symbolic link"
-                            )
-                        _, payload = read_regular_file(
-                            candidate,
-                            f"governed {label} asset snapshot member",
-                            maximum_bytes=2 * 1024**3,
-                            boundary=resolved,
-                        )
-                        files += 1
-                        total_bytes += len(payload)
-                        if files > 1_000_000 or total_bytes > 16 * 1024**3:
-                            raise ValueError(
-                                f"governed {label} asset exceeds snapshot limits"
-                            )
-                        output = destination / relative_root / name
-                        with output.open("xb") as handle:
-                            handle.write(payload)
-                            handle.flush()
-                            os.fsync(handle.fileno())
-                        os.chmod(output, 0o400)
-                for snapshot_directory in sorted(
-                    (item for item in destination.rglob("*") if item.is_dir()),
-                    reverse=True,
-                ):
-                    os.chmod(snapshot_directory, 0o500)
-                os.chmod(destination, 0o500)
-            else:
-                raise ValueError(
-                    f"governed {label} asset is not a regular file or directory"
-                )
-            if governed_asset_sha256(destination) != expected:
-                raise ValueError(f"governed {label} asset changed while it was sealed")
-            copies[label] = destination
-        os.chmod(temporary_root, 0o500)
-        yield copies
-        for label, snapshot in copies.items():
-            if governed_asset_sha256(snapshot) != expected_digests[label]:
-                raise ValueError(
-                    f"governed {label} asset snapshot changed during scanner execution"
-                )
-    finally:
-        if temporary_root.exists():
-            for item in [temporary_root, *temporary_root.rglob("*")]:
-                try:
-                    os.chmod(item, 0o700 if item.is_dir() else 0o600)
-                except OSError:
-                    pass
-            shutil.rmtree(temporary_root, ignore_errors=False)
-
-
 def python_runtime_closure_sha256(
     executable: str,
     *,
     include_environment: bool = False,
+    include_standard_library: bool = False,
     refresh: bool = False,
     require_native_plugin_manifest: bool = False,
 ) -> str | None:
@@ -406,7 +272,7 @@ def python_runtime_closure_sha256(
         }
     )
     native_roots.add(interpreter)
-    if include_environment:
+    if include_environment or include_standard_library:
         stdlib = Path(sysconfig.get_path("stdlib")).resolve()
         stdlib_files = sorted(
             path
@@ -435,7 +301,13 @@ def python_runtime_closure_sha256(
                 }
             )
         native_roots.update(_native_runtime_components())
-    for located in _native_dependency_closure(native_roots):
+    for located in _native_dependency_closure(
+        native_roots,
+        application_root=Path(sys.base_prefix).resolve(),
+        python_search_roots=(Path(sysconfig.get_path("platlib")) / "pywin32_system32",)
+        if os.name == "nt"
+        else (),
+    ):
         _, payload = read_regular_file(
             located,
             "Python native runtime component",
@@ -696,10 +568,19 @@ def _is_native_binary(path: Path) -> bool:
     }
 
 
-def _native_dependency_closure(roots: set[Path]) -> list[Path]:
+def _native_dependency_closure(
+    roots: set[Path],
+    *,
+    application_root: Path | None = None,
+    python_search_roots: tuple[Path, ...] = (),
+) -> list[Path]:
     pending = sorted(roots)
     observed: set[Path] = set()
-    application_root = pending[0].parent if pending else Path.cwd()
+    # Python extension modules resolve the interpreter DLL from its base install,
+    # which can differ from both the venv and the first sorted native component.
+    application_root = application_root or (
+        pending[0].parent if pending else Path.cwd()
+    )
     while pending:
         path = pending.pop()
         resolved = path.resolve()
@@ -708,20 +589,31 @@ def _native_dependency_closure(roots: set[Path]) -> list[Path]:
         if len(observed) >= 4_096:
             raise ValueError("native runtime closure exceeds 4096 files")
         observed.add(resolved)
-        for dependency in _native_dependencies(resolved, application_root):
+        dependencies = (
+            _native_dependencies(
+                resolved, application_root, python_search_roots=python_search_roots
+            )
+            if python_search_roots
+            else _native_dependencies(resolved, application_root)
+        )
+        for dependency in dependencies:
             if dependency not in observed:
                 pending.append(dependency)
     return sorted(observed)
 
 
-def _native_dependencies(path: Path, application_root: Path) -> set[Path]:
+def _native_dependencies(
+    path: Path, application_root: Path, *, python_search_roots: tuple[Path, ...] = ()
+) -> set[Path]:
     try:
         with path.open("rb") as handle:
             magic = handle.read(4)
     except OSError as exc:
         raise ValueError(f"native runtime component became unreadable: {path}") from exc
     if magic[:2] == b"MZ":
-        return _pe_dependencies(path, application_root)
+        return _pe_dependencies(
+            path, application_root, python_search_roots=python_search_roots
+        )
     if magic == b"\x7fELF":
         return _elf_dependencies(path, application_root)
     if magic in {
@@ -735,7 +627,7 @@ def _native_dependencies(path: Path, application_root: Path) -> set[Path]:
     return set()
 
 
-def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma: no cover  # fmt: skip
+def _pe_dependencies(path: Path, application_root: Path, *, python_search_roots: tuple[Path, ...] = ()) -> set[Path]:  # pragma: no cover  # fmt: skip
     import pefile  # type: ignore[import-untyped]
 
     try:
@@ -764,7 +656,15 @@ def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma
     windows = Path(
         os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
     ).resolve()
-    roots = (path.parent, application_root, windows / "System32", windows)
+    # pywin32's installed bootstrap adds pywin32_system32 to the DLL search path.
+    # These additional roots are supplied only by Python-environment closure checks.
+    roots = (
+        path.parent,
+        application_root,
+        *python_search_roots,
+        windows / "System32",
+        windows,
+    )
     api_sets = ("api-ms-", "ext-ms-")
     return _resolve_native_names(names, roots, api_set_prefixes=api_sets) | (
         _resolve_native_names(
@@ -843,58 +743,6 @@ def _macho_dependencies(path: Path, application_root: Path) -> set[Path]:  # pra
     return resolved
 
 
-def _darwin_shared_cache_dependency(name: str) -> bool:
-    """Identify Apple system libraries supplied by the sealed dyld cache."""
-    return sys.platform == "darwin" and name.startswith(
-        ("/System/Library/", "/usr/lib/")
-    )
-
-
-def _darwin_system_runtime_record() -> dict[str, object] | None:  # pragma: no cover
-    """Bind cache-resident Mach-O dependencies to the sealed OS build identity."""
-    if sys.platform != "darwin":
-        return None
-    version_files = (
-        Path("/System/Library/CoreServices/SystemVersion.plist"),
-        Path("/System/Library/CoreServices/SystemVersionCompat.plist"),
-    )
-    identities: list[dict[str, object]] = []
-    total_bytes = 0
-    for path in version_files:
-        if not path.is_file():
-            continue
-        _, payload = read_regular_file(
-            path,
-            "Darwin sealed system version identity",
-            maximum_bytes=1024 * 1024,
-        )
-        total_bytes += len(payload)
-        identities.append(
-            {
-                "path": str(path),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "size": len(payload),
-            }
-        )
-    if not identities:
-        raise ValueError("Darwin sealed system version identity is unavailable")
-    kernel = os.uname()
-    identity = {
-        "kernel": {
-            "machine": kernel.machine,
-            "release": kernel.release,
-            "sysname": kernel.sysname,
-            "version": kernel.version,
-        },
-        "sealed_system_versions": identities,
-    }
-    return {
-        "path": "<darwin-sealed-system-runtime>",
-        "sha256": hashlib.sha256(canonical_bytes(identity)).hexdigest(),
-        "size": total_bytes,
-    }
-
-
 def _resolve_native_names(
     names: set[str],
     roots: tuple[Path, ...] | list[Path],
@@ -926,38 +774,6 @@ def _resolve_native_names(
     return result
 
 
-def _native_runtime_components() -> list[Path]:
-    """Return native libraries that form the interpreter's platform closure."""
-    candidates: set[Path] = set()
-    prefixes = {Path(sys.prefix).resolve(), Path(sys.base_prefix).resolve()}
-    executable_parent = Path(sys.executable).resolve().parent
-    for root in prefixes | {executable_parent}:
-        for pattern in ("*.dll", "*.pyd", "libpython*.so*", "libpython*.dylib"):
-            candidates.update(path.resolve() for path in root.glob(pattern))
-        native_directory = root / "DLLs"
-        if native_directory.is_dir():
-            candidates.update(
-                path.resolve()
-                for pattern in ("*.dll", "*.pyd")
-                for path in native_directory.glob(pattern)
-            )
-    library_directory = sysconfig.get_config_var("LIBDIR")
-    library_name = sysconfig.get_config_var("LDLIBRARY")
-    if library_directory and library_name:
-        candidates.add((Path(str(library_directory)) / str(library_name)).resolve())
-    if os.name == "nt":
-        windows = Path(
-            os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
-        )
-        system = windows / "System32"
-        candidates.update(
-            path.resolve()
-            for name in ("ucrtbase.dll", "vcruntime140.dll", "vcruntime140_1.dll")
-            if (path := system / name).is_file()
-        )
-    return sorted(path for path in candidates if path.is_file())
-
-
 def resolve_executable(executable: str) -> str | None:
     candidate = Path(executable)
     if candidate.parent != Path(".") or candidate.is_absolute():
@@ -976,62 +792,6 @@ def resolve_executable(executable: str) -> str | None:
     return shutil.which(executable, path=str(interpreter_bin))
 
 
-def isolated_environment(
-    extra: dict[str, str] | None = None,
-    *,
-    executable: str | None = None,
-) -> dict[str, str]:
-    """Construct a low-credential environment for scanner subprocesses."""
-    retained = {
-        "SYSTEMROOT",
-        "WINDIR",
-        "COMSPEC",
-        "TEMP",
-        "TMP",
-        "LANG",
-        "LC_ALL",
-    }
-    env = {key: value for key, value in os.environ.items() if key.upper() in retained}
-    path_entries = []
-    if executable:
-        path_entries.append(str(Path(executable).expanduser().resolve().parent))
-    path_entries.append(str(Path(sys.executable).resolve().parent))
-    if os.name == "nt":
-        windows = Path(
-            os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
-        )
-        path_entries.extend((str(windows / "System32"), str(windows)))
-        env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
-    else:
-        path_entries.extend(("/usr/local/bin", "/usr/bin", "/bin"))
-    env["PATH"] = os.pathsep.join(dict.fromkeys(path_entries))
-    env.update(
-        {
-            "PYTHONNOUSERSITE": "1",
-            "SEMGREP_SEND_METRICS": "off",
-            "SEMGREP_ENABLE_VERSION_CHECK": "0",
-        }
-    )
-    if extra:
-        forbidden = {
-            "DYLD_INSERT_LIBRARIES",
-            "DYLD_LIBRARY_PATH",
-            "LD_LIBRARY_PATH",
-            "LD_PRELOAD",
-            "PATH",
-            "PYTHONHOME",
-            "PYTHONPATH",
-        }
-        rejected = sorted(key for key in extra if key.upper() in forbidden)
-        if rejected:
-            raise ValueError(
-                "scanner environment cannot override executable or loader paths: "
-                + ", ".join(rejected)
-            )
-        env.update(extra)
-    return env
-
-
 def _decode_and_cap(value: bytes, maximum: int) -> tuple[str, bool]:
     truncated = len(value) > maximum
     capped = value[:maximum]
@@ -1046,6 +806,8 @@ def run_command(
     max_output_bytes: int,
     environment: CommandEnvironment | None = None,
 ) -> RawExecution:
+    if stop_reason():
+        raise ScanInterrupted(stop_reason())
     validate_governed_command_input(
         command,
         timeout_seconds=timeout_seconds,
@@ -1084,7 +846,7 @@ def run_command(
             subprocess, "CREATE_NEW_PROCESS_GROUP", 0
         )
     with tempfile.TemporaryDirectory(
-        prefix="pysec-process-home-", ignore_cleanup_errors=True
+        prefix="p", ignore_cleanup_errors=True
     ) as private_home:
         # macOS exposes its temporary root through ``/var`` -> ``/private/var``.
         # Resolve that operating-system alias before establishing the private
@@ -1094,23 +856,17 @@ def run_command(
         process_environment = isolated_environment(
             environment.extra if environment else None,
             executable=command[0] if command else None,
+            auxiliary_executables=environment.auxiliary_executables
+            if environment
+            else (),
         )
-        private_locations = {
-            "HOME": private_root,
-            "USERPROFILE": private_root,
-            "APPDATA": private_root / "AppData" / "Roaming",
-            "LOCALAPPDATA": private_root / "AppData" / "Local",
-            "XDG_CACHE_HOME": private_root / "cache",
-            "TEMP": private_root / "tmp",
-            "TMP": private_root / "tmp",
-            "TMPDIR": private_root / "tmp",
-        }
-        for name, path in private_locations.items():
-            path.mkdir(parents=True, exist_ok=True)
-            process_environment[name] = str(path)
+        private_runtime_environment(process_environment, private_root)
         private_command = [
             item.replace("{PYSEC_PRIVATE_ROOT}", str(private_root)) for item in command
         ]
+        private_command = isolate_python_command(
+            private_command, private_root / "bytecode"
+        )
         gate: Path | None = None
         limit_report = private_root / "limits-applied.json"
         process_command = command
@@ -1118,6 +874,9 @@ def run_command(
         process_command = [
             sys.executable,
             "-I",
+            "-B",
+            "-X",
+            f"pycache_prefix={private_root / 'bytecode'}",
             "-c",
             _LIMIT_GATE_BOOTSTRAP,
             str(gate),
@@ -1179,6 +938,8 @@ def run_command(
                 terminate_tree()
                 raise
         timed_out = False
+        interruption = ""
+        interruption_cause: StopCause | None = None
         output_limit_exceeded = False
         scratch_limit_exceeded = False
         resident_memory_limit_exceeded = False
@@ -1194,8 +955,12 @@ def run_command(
             raise ValueError("scanner scratch limit must be at least 1 MiB")
         try:
             while process.poll() is None:
-                if time.monotonic() >= deadline:
-                    timed_out = True
+                if stop_reason() or time.monotonic() >= deadline:
+                    interruption = stop_reason()
+                    interruption_cause = stop_cause(interruption)
+                    timed_out = (
+                        not interruption or interruption_cause == StopCause.DEADLINE
+                    )
                     terminated = terminate_tree()
                     break
                 if (
@@ -1264,7 +1029,7 @@ def run_command(
                 )
         return RawExecution(
             command=reported_command,
-            exit_code=None if timed_out else process.returncode,
+            exit_code=None if timed_out or interruption else process.returncode,
             stdout=stdout,
             stderr=stderr,
             duration_seconds=time.monotonic() - started,
@@ -1277,27 +1042,9 @@ def run_command(
             resident_memory_limit_exceeded=resident_memory_limit_exceeded,
             resource_limits_enforced=limits,
             resource_limit_errors=limit_errors,
+            stop_reason=interruption,
+            stop_cause=interruption_cause,
         )
-
-
-def _process_tree_resident_bytes(pid: int) -> int:
-    """Return current aggregate RSS for one live process tree."""
-    import psutil
-
-    try:
-        root = psutil.Process(pid)
-        processes = [root, *root.children(recursive=True)]
-        total = 0
-        for candidate in processes:
-            try:
-                total += candidate.memory_info().rss
-            except psutil.NoSuchProcess:
-                continue
-        return total
-    except psutil.NoSuchProcess:
-        return 0
-    except (psutil.AccessDenied, OSError) as exc:
-        raise RuntimeError("resident-memory-watchdog:unavailable") from exc
 
 
 def _apply_process_resource_limits(
@@ -1342,122 +1089,6 @@ def _apply_process_resource_limits(
     ):
         return (), ("posix-child-limits:invalid-report",), None
     return tuple(report["enforced"]), tuple(report["errors"]), None
-
-
-def _apply_windows_job_limits(  # pragma: no cover - exercised on Windows CI
-    process: subprocess.Popen[bytes],
-    *,
-    timeout_seconds: int,
-) -> tuple[tuple[str, ...], tuple[str, ...], int]:
-    """Contain a Windows scanner in a kill-on-close, quota-limited Job Object."""
-    import ctypes
-    from ctypes import wintypes
-
-    class IO_COUNTERS(ctypes.Structure):
-        _fields_ = [
-            (name, ctypes.c_ulonglong)
-            for name in (
-                "ReadOperationCount",
-                "WriteOperationCount",
-                "OtherOperationCount",
-                "ReadTransferCount",
-                "WriteTransferCount",
-                "OtherTransferCount",
-            )
-        ]
-
-    class BASIC_LIMITS(ctypes.Structure):
-        _fields_ = [
-            ("PerProcessUserTimeLimit", ctypes.c_longlong),
-            ("PerJobUserTimeLimit", ctypes.c_longlong),
-            ("LimitFlags", wintypes.DWORD),
-            ("MinimumWorkingSetSize", ctypes.c_size_t),
-            ("MaximumWorkingSetSize", ctypes.c_size_t),
-            ("ActiveProcessLimit", wintypes.DWORD),
-            ("Affinity", ctypes.c_size_t),
-            ("PriorityClass", wintypes.DWORD),
-            ("SchedulingClass", wintypes.DWORD),
-        ]
-
-    class EXTENDED_LIMITS(ctypes.Structure):
-        _fields_ = [
-            ("BasicLimitInformation", BASIC_LIMITS),
-            ("IoInfo", IO_COUNTERS),
-            ("ProcessMemoryLimit", ctypes.c_size_t),
-            ("JobMemoryLimit", ctypes.c_size_t),
-            ("PeakProcessMemoryUsed", ctypes.c_size_t),
-            ("PeakJobMemoryUsed", ctypes.c_size_t),
-        ]
-
-    class CPU_RATE_CONTROL(ctypes.Structure):
-        _fields_ = [("ControlFlags", wintypes.DWORD), ("CpuRate", wintypes.DWORD)]
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-    kernel32.SetInformationJobObject.argtypes = [
-        wintypes.HANDLE,
-        ctypes.c_int,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-    ]
-    kernel32.SetInformationJobObject.restype = wintypes.BOOL
-    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
-    kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    job = kernel32.CreateJobObjectW(None, None)
-    if not job:
-        error_code = ctypes.get_last_error()  # type: ignore[attr-defined]
-        raise OSError(error_code, "CreateJobObjectW failed")
-    limits = EXTENDED_LIMITS()
-    limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x200 | 0x100 | 0x8 | 0x4
-    limits.BasicLimitInformation.PerJobUserTimeLimit = (
-        max(1, timeout_seconds) * 10_000_000
-    )
-    limits.BasicLimitInformation.ActiveProcessLimit = 256
-    limits.ProcessMemoryLimit = 8 * 1024**3
-    limits.JobMemoryLimit = 16 * 1024**3
-    if not kernel32.SetInformationJobObject(
-        job, 9, ctypes.byref(limits), ctypes.sizeof(limits)
-    ):
-        error = ctypes.get_last_error()  # type: ignore[attr-defined]
-        kernel32.CloseHandle(job)
-        raise OSError(error, "SetInformationJobObject failed")
-    cpu = CPU_RATE_CONTROL(ControlFlags=0x1 | 0x4, CpuRate=8000)
-    if not kernel32.SetInformationJobObject(
-        job, 15, ctypes.byref(cpu), ctypes.sizeof(cpu)
-    ):
-        error = ctypes.get_last_error()  # type: ignore[attr-defined]
-        kernel32.CloseHandle(job)
-        raise OSError(error, "CPU rate control could not be applied")
-    process_handle = getattr(process, "_handle", None)
-    if not process_handle or not kernel32.AssignProcessToJobObject(job, process_handle):
-        error = ctypes.get_last_error()  # type: ignore[attr-defined]
-        kernel32.CloseHandle(job)
-        raise OSError(error, "AssignProcessToJobObject failed")
-    return (
-        (
-            "kill-on-close",
-            "process-count",
-            "process-memory",
-            "job-memory",
-            "cpu-time",
-            "cpu-rate",
-            "pre-execution-assignment",
-        ),
-        (),
-        int(ctypes.cast(job, ctypes.c_void_p).value or 0),
-    )
-
-
-def _close_windows_handle(handle: int) -> None:  # pragma: no cover
-    import ctypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-    kernel32.CloseHandle.restype = ctypes.c_int
-    kernel32.CloseHandle(handle)
 
 
 def _directory_size_exceeds(root: Path, maximum: int) -> bool:

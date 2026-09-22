@@ -489,9 +489,11 @@ def _extract_archive(archive: Path, staging: Path) -> None:
 
 
 def _derive_key(shared_secret: bytes, salt: bytes) -> bytes:
-    return HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        info=b"py-security-suite/confidential-report/v1",
-    ).derive(shared_secret)
+    return bytes(
+        HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            info=b"py-security-suite/confidential-report/v1",
+        ).derive(shared_secret)
+    )

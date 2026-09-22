@@ -14,6 +14,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  detection-accuracy:
+    name: Required source-security accuracy for release
+    uses: ./.github/workflows/detection-accuracy.yml
+    with:
+      require_accuracy: true
+    permissions:
+      contents: read
+
   deep-assurance:
     name: Fresh deep assurance for release source
     uses: ./.github/workflows/deep-assurance.yml
@@ -24,7 +32,7 @@ jobs:
 
   independent-build:
     name: Independent builder ${{ matrix.builder }}
-    needs: deep-assurance
+    needs: [deep-assurance, detection-accuracy]
     strategy:
       fail-fast: false
       matrix:
@@ -101,9 +109,19 @@ jobs:
           path: .artifacts/release-${{ matrix.builder }}
           if-no-files-found: error
 
+  release-wheel-accuracy:
+    name: Required accuracy of the exact independently built wheel
+    needs: independent-build
+    uses: ./.github/workflows/detection-accuracy.yml
+    with:
+      require_accuracy: true
+      wheel_artifact: release-builder-a
+    permissions:
+      contents: read
+
   compare-and-exercise:
     name: Compare independent builds and exercise exact wheel
-    needs: independent-build
+    needs: [independent-build, release-wheel-accuracy]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
