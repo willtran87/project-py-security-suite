@@ -140,7 +140,9 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("<summary>Per-control actions (2)</summary>", markdown)
         self.assertIn("<summary>All selected controls</summary>", markdown)
 
-    def test_optional_unavailable_tool_is_visible_but_does_not_block(self) -> None:
+    def test_required_scanners_cannot_make_profile_tools_optional(self) -> None:
+        # Regression: required_scanners used to replace the profile tool set,
+        # so an unavailable semgrep in the standard profile did not block.
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             config = load_config(profile_override="standard")
@@ -159,11 +161,9 @@ class DoctorTests(unittest.TestCase):
                 intelligence.return_value.errors = []
                 baseline.return_value.errors = []
                 document = assess_readiness(target=target, config=config)
-        self.assertTrue(document["ready"])
-        self.assertEqual(document["blocking_tools"], [])
-        self.assertEqual(document["optional_attention_tools"], ["semgrep"])
-        self.assertEqual(document["summary"]["attention"], 1)
-        self.assertIn("[optional] semgrep", render_readiness(document))
+        self.assertFalse(document["ready"])
+        self.assertEqual(document["blocking_tools"], ["semgrep"])
+        self.assertEqual(document["optional_attention_tools"], [])
 
     def test_missing_disabled_and_not_applicable_adapters_are_distinct(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

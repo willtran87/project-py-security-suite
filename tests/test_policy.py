@@ -227,7 +227,9 @@ class PolicyTests(unittest.TestCase):
             network_isolation_attested=True,
         )
         self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
-        self.assertIn("explicitly required scanner", decision.reasons[0])
+        self.assertTrue(
+            any("explicitly required scanner" in reason for reason in decision.reasons)
+        )
 
     def test_high_finding_fails(self) -> None:
         item = finding(Severity.HIGH)

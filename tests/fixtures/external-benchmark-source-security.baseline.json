@@ -122,8 +122,8 @@
     },
     "codeql": {
       "CWE-22": {
-        "fp": 32,
-        "fn": 20
+        "fp": 33,
+        "fn": 11
       },
       "CWE-328": {
         "fp": 0,
@@ -179,7 +179,7 @@
       }
     }
   },
-  "review": "docs/professional-acceptance.md#dynamic-flask-html-and-exact-wheel-validation",
+  "review": "docs/professional-acceptance.md#codeql-path-baseline-review",
   "protected_detections": {
     "bandit": {
       "CWE-330": [
@@ -428,11 +428,13 @@
         "BenchmarkTest00002",
         "BenchmarkTest00008",
         "BenchmarkTest00085",
+        "BenchmarkTest00087",
         "BenchmarkTest00089",
         "BenchmarkTest00092",
         "BenchmarkTest00171",
         "BenchmarkTest00172",
         "BenchmarkTest00173",
+        "BenchmarkTest00175",
         "BenchmarkTest00178",
         "BenchmarkTest00180",
         "BenchmarkTest00182",
@@ -448,11 +450,14 @@
         "BenchmarkTest00523",
         "BenchmarkTest00529",
         "BenchmarkTest00610",
+        "BenchmarkTest00613",
         "BenchmarkTest00615",
+        "BenchmarkTest00618",
         "BenchmarkTest00619",
         "BenchmarkTest00620",
         "BenchmarkTest00662",
         "BenchmarkTest00665",
+        "BenchmarkTest00667",
         "BenchmarkTest00737",
         "BenchmarkTest00739",
         "BenchmarkTest00741",
@@ -462,8 +467,12 @@
         "BenchmarkTest00751",
         "BenchmarkTest00906",
         "BenchmarkTest00907",
+        "BenchmarkTest00910",
+        "BenchmarkTest00914",
         "BenchmarkTest00915",
         "BenchmarkTest00916",
+        "BenchmarkTest00918",
+        "BenchmarkTest00920",
         "BenchmarkTest01179",
         "BenchmarkTest01181",
         "BenchmarkTest01183",

@@ -235,7 +235,7 @@ depends_on = ["py_security_suite.trusted_time", "py_security_suite.path_safety",
 
 [[modules]]
 path = "py_security_suite.config"
-depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers"]
+depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers", "py_security_suite.config_policy_floor"]
 
 [[modules]]
 path = "py_security_suite.config_advisor"
@@ -299,7 +299,7 @@ depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.ownership"
 
 [[modules]]
 path = "py_security_suite.evidence_ingest"
-depends_on = ["py_security_suite.assurance_profile", "py_security_suite.strict_json", "py_security_suite.version", "py_security_suite.control_proof", "py_security_suite.trusted_time", "py_security_suite.inventory", "py_security_suite.trusted_observation"]
+depends_on = ["py_security_suite.evidence_values", "py_security_suite.assurance_profile", "py_security_suite.strict_json", "py_security_suite.version", "py_security_suite.control_proof", "py_security_suite.trusted_time", "py_security_suite.inventory", "py_security_suite.trusted_observation"]
 
 [[modules]]
 path = "py_security_suite.evidence_pack"
@@ -666,6 +666,10 @@ path = "py_security_suite.config_numbers"
 depends_on = []
 
 [[modules]]
+path = "py_security_suite.config_policy_floor"
+depends_on = []
+
+[[modules]]
 path = "py_security_suite.scan_control"
 depends_on = ["py_security_suite.process_memory", "py_security_suite.scan_progress"]
 
@@ -736,3 +740,7 @@ depends_on = ["py_security_suite.path_safety"]
 [[modules]]
 path = "py_security_suite.governed_assets"
 depends_on = ["py_security_suite.path_safety", "py_security_suite.strict_json"]
+
+[[modules]]
+path = "py_security_suite.evidence_values"
+depends_on = []

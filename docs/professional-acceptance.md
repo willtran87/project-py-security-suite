@@ -3,6 +3,27 @@
 The acceptance gates distinguish product correctness, public benchmark results,
 and production approval. Passing one does not establish the others.
 
+### CodeQL path-traversal baseline review — 2026-11-27 { #codeql-path-baseline-review }
+
+The CI source-security benchmark (run `35696577896`, revision `6d1b808`) records
+CodeQL CWE-22 at **54 TP, 33 FP, 11 FN and 70 TN**, against a ceiling of 32 FP
+and 20 FN set from the September 8 measurement (45 TP, 32 FP, 20 FN, 71 TN).
+Per-case comparison shows exactly ten changes, all ConfigParser cases reached by
+the September 12 section/key flow model: nine vulnerable cases move from FN to TP
+(`BenchmarkTest00087`, `00175`, `00613`, `00618`, `00667`, `00910`, `00914`,
+`00918`, `00920`) and one safe case, `BenchmarkTest01008`, moves from TN to FP.
+That case stores `request.path.split("/")[1]` in ConfigParser; it is safe only
+because its literal route fixes that segment. The same unproven `request.path`
+route context already accounts for twelve accepted CodeQL CWE-22 false positives
+without ConfigParser (`00005`–`00007`, `00009`, `01004`–`01007`, `01009`,
+`01220`–`01222`), so this is the existing limitation newly reachable, not a
+ConfigParser model defect.
+
+The reviewed baseline therefore raises the CodeQL CWE-22 FP ceiling from 32 to
+33, lowers its FN ceiling from 20 to 11, and adds the nine new detections to the
+protected CodeQL CWE-22 cases (45 to 54; 368 protections in all). No other
+ceiling, label, protected case or accuracy threshold changes.
+
 ### XPath precision and merge qualification — 2026-09-22 { #current-validation-increment }
 
 The native CodeQL developer suite passes **284 cases**, including 27 new controls

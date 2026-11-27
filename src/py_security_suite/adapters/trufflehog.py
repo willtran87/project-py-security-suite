@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +16,22 @@ from ..models import (
 )
 from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
+from .common import (
+    contains_regular_file,
+    native_suppression_finding,
+    native_suppression_markers,
+)
+
+# TruffleHog 3.x has no switch to disable its in-source ignore comment, so the
+# suite counts each occurrence as an unaccepted finding instead.
+NATIVE_IGNORE_MARKER = b"trufflehog:ignore"
 
 
 class TruffleHogAdapter(ScannerAdapter):
     name = "trufflehog"
 
     def not_applicable_reason(self, target: Path) -> str | None:
-        if not any(path.is_file() for path in target.iterdir()):
+        if not contains_regular_file(target):
             return "the target contains no files to inspect for secrets"
         return None
 
@@ -48,7 +58,7 @@ class TruffleHogAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        findings: list[Finding] = []
+        findings: list[Finding] = self._native_suppressions(target)
         for line in payload.splitlines():
             if not line.strip():
                 continue
@@ -132,6 +142,30 @@ class TruffleHogAdapter(ScannerAdapter):
                 )
             )
         return findings
+
+    def _native_suppressions(self, target: Path) -> list[Finding]:
+        excludes = self.config.rules_path
+        patterns: list[re.Pattern[str]] = []
+        if excludes is not None:
+            for line in (
+                excludes.expanduser().resolve().read_text(encoding="utf-8").splitlines()
+            ):
+                if line.strip():
+                    patterns.append(re.compile(line.strip()))
+        root = target.resolve()
+        return [
+            native_suppression_finding(
+                self.name,
+                rule_id="trufflehog.native-suppression",
+                path=normalize_repo_path(target, str(path)),
+                line=line,
+                mechanism="trufflehog:ignore comment",
+                area="secrets",
+            )
+            for path, line in native_suppression_markers(
+                root, NATIVE_IGNORE_MARKER, excluded=patterns
+            )
+        ]
 
 
 def _location(value: Any) -> tuple[str, int | None]:

@@ -29,6 +29,17 @@
   snapshots published after issuance so a later compromise is detected.
 - Reject governance authority keys once verification time reaches
   `revoked_at`, so a revoked key cannot pass by backdating `signed_at`.
+- Close policy fail-open paths. `policy.required_scanners` now extends the
+  profile's required scanners instead of replacing them. An organization
+  `profile` is a floor that repository configuration and `--profile` can only
+  raise. Production/release risk-acceptance ledgers need an organization-pinned
+  `risk_acceptance_sha256`, and acceptances can declare `max_severity` and
+  `known_exploited`: re-rated or newly known-exploited findings stay active, and
+  KEV findings are never suppressed in production/release. `INCOMPLETE` reasons
+  include the blocking-finding count, `unknown` severity blocks in
+  production/release, `--diagnostic-without-isolation` always yields
+  `INCOMPLETE`, `incomplete_is_blocking = false` is rejected, and boolean
+  settings must be TOML booleans.
 
 - Isolate validator and child-process bytecode caches, rejecting stale reports and
   preserving exact wheel receipts and report bytes in unique archives.

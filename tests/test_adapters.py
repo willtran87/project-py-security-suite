@@ -7,7 +7,10 @@ import unittest
 from pathlib import Path
 
 from py_security_suite.adapters.bandit import BanditAdapter
-from py_security_suite.adapters.detect_secrets import DetectSecretsAdapter
+from py_security_suite.adapters.detect_secrets import (
+    DetectSecretsAdapter,
+    is_suite_repository,
+)
 from py_security_suite.adapters.osv import OsvScannerAdapter
 from py_security_suite.adapters.semgrep import SemgrepAdapter
 from py_security_suite.config import ToolConfig
@@ -171,8 +174,38 @@ class AdapterParserTests(unittest.TestCase):
 
         self.assertIsNotNone(re.search(pattern, ".artifacts/report.json"))
         self.assertIsNotNone(re.search(pattern, r".pysec-tools\Scripts\tool.exe"))
-        self.assertIsNotNone(re.search(pattern, ".pysec-models.json"))
-        self.assertIsNone(re.search(pattern, "repo.pysec-models.json"))
+        # Third-party targets get only root-anchored tool-cache exclusions:
+        # nested caches and suite-specific files are still scanned.
+        self.assertIsNone(re.search(pattern, "pkg/.artifacts/report.json"))
+        self.assertIsNone(re.search(pattern, ".pysec-models.json"))
+        self.assertIsNone(re.search(pattern, "site/index.html"))
+        self.assertIsNone(re.search(pattern, r"nested\junit.xml"))
+        self.assertIsNone(re.search(pattern, "coverage.json"))
+
+    def test_detect_secrets_suite_exclusions_apply_only_to_suite_repository(
+        self,
+    ) -> None:
+        for name in ("site", "coverage.json", "junit.xml"):
+            path = self.target / name
+            if name == "site":
+                path.mkdir()
+            else:
+                path.touch()
+        command = DetectSecretsAdapter(ToolConfig(), 4096).build_command(
+            "detect-secrets", self.target
+        )
+        scan_arguments = command[4 : command.index("--all-files")]
+        for name in ("site", "coverage.json", "junit.xml"):
+            self.assertIn(str((self.target / name).resolve()), scan_arguments)
+        self.assertFalse(is_suite_repository(self.target))
+        suite_root = Path(__file__).resolve().parents[1]
+        self.assertTrue(is_suite_repository(suite_root))
+        suite_command = DetectSecretsAdapter(ToolConfig(), 4096).build_command(
+            "detect-secrets", suite_root
+        )
+        suite_pattern = suite_command[suite_command.index("--exclude-files") + 1]
+        self.assertIsNotNone(re.search(suite_pattern, ".pysec-models.json"))
+        self.assertIsNone(re.search(suite_pattern, "repo.pysec-models.json"))
 
     def test_osv_v2_json_is_normalized(self) -> None:
         payload = json.dumps(

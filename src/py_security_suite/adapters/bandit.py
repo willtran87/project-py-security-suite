@@ -77,6 +77,9 @@ class BanditAdapter(ScannerAdapter):
             "-f",
             "json",
             "-q",
+            # Target-controlled "# nosec" comments must not suppress findings;
+            # exceptions are governed by suite risk acceptance instead.
+            "--ignore-nosec",
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:

@@ -96,11 +96,11 @@ class TrivyAdapter(ScannerAdapter):
 def _misconfigurations(result: dict[str, Any], path: str) -> list[Finding]:
     values = result.get("Misconfigurations") or []
     if not isinstance(values, list):
-        return []
+        raise TypeError("Trivy Misconfigurations must be a list")
     findings: list[Finding] = []
     for item in values:
         if not isinstance(item, dict):
-            continue
+            raise TypeError("Trivy misconfiguration must be an object")
         rule_id = str(item.get("ID") or item.get("AVDID") or "TRIVY-MISCONFIG")
         title = str(item.get("Title") or item.get("Message") or rule_id)
         cause = item.get("CauseMetadata") or {}
@@ -162,11 +162,11 @@ def _misconfigurations(result: dict[str, Any], path: str) -> list[Finding]:
 def _licenses(result: dict[str, Any], default_path: str, target: Path) -> list[Finding]:
     values = result.get("Licenses") or []
     if not isinstance(values, list):
-        return []
+        raise TypeError("Trivy Licenses must be a list")
     findings: list[Finding] = []
     for item in values:
         if not isinstance(item, dict):
-            continue
+            raise TypeError("Trivy license finding must be an object")
         severity = map_severity(item.get("Severity"))
         if severity in {Severity.LOW, Severity.INFORMATIONAL}:
             continue
