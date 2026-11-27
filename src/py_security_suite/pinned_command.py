@@ -17,6 +17,7 @@ from .execution import (
     sanitize_diagnostic,
     sha256_file,
 )
+from .executable_pin import pin_executable
 from .operation_receipt import verify_operation_receipt
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
@@ -147,7 +148,14 @@ def run_pinned_json_command(
         "sandbox_identity_sha256": sandbox_identity,
         "remote_attestation_key_sha256": remote_attestation_key_sha256,
     }
-    with tempfile.TemporaryDirectory(prefix="pysec-pinned-attestation-") as temporary:
+    with (
+        tempfile.TemporaryDirectory(prefix="pysec-pinned-attestation-") as temporary,
+        pin_executable(Path(resolved)) as pinned,
+    ):
+        # Hold the pinned executable (deny-write on Windows, identity-checked
+        # on POSIX) from the digest comparison through process exit.
+        if pinned.sha256 != expected_executable:
+            raise ValueError(f"{prefix} executable changed before governed execution")
         attestation_path = Path(temporary) / "effective-policy.json"
         result = run_command(
             [str(resolved), *command[1:], encoded_request],
@@ -172,6 +180,8 @@ def run_pinned_json_command(
                 max_scratch_bytes=16 * 1024 * 1024,
             ),
         )
+        if not pinned.unchanged():
+            raise ValueError(f"{prefix} executable changed during governed execution")
         failure_detail = _execution_failure_detail(result)
         if failure_detail:
             raise ValueError(
@@ -213,6 +223,8 @@ def _execution_failure_detail(result: RawExecution) -> str:
         failures.append("resident-memory limit exceeded")
     if result.resource_limit_errors:
         failures.append("resource limits were not enforced")
+    if result.launch_error:
+        failures.append(result.launch_error)
     diagnostic = sanitize_diagnostic(result.stderr, maximum=1024)
     if diagnostic:
         failures.append(diagnostic)

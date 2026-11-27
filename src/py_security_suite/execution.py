@@ -42,64 +42,23 @@ from .diagnostic_safety import (
 )
 from .governance_quorum import verify_governance_quorum
 from .strict_json import canonical_bytes, loads as strict_loads
+from .executable_pin import require_windows_image
+from .runtime_site_audit import site_directory_records
+from .scanner_launch import (
+    LIMIT_GATE_BOOTSTRAP as _LIMIT_GATE_BOOTSTRAP,
+    OUTPUT_BUDGET,
+    SCRATCH_CHECK_INTERVAL_SECONDS,
+    descendant_snapshot,
+    directory_size_exceeds as _directory_size_exceeds,
+    kill_descendants,
+    kill_then_wait,
+    launch_failure,
+    wait_quietly,
+)
 
 
 _RUNTIME_CLOSURE_LOCK = threading.Lock()
 _ENVIRONMENT_RUNTIME_CLOSURE: str | None = None
-_LIMIT_GATE_BOOTSTRAP = """
-import json, os, subprocess, sys, time
-gate, report = sys.argv[1:3]
-enforced, errors = [], []
-if os.name != "nt":
-    import resource
-    memory_limits = (
-        ()
-        if sys.platform == "darwin"
-        else (("address-space", "RLIMIT_AS", 8 * 1024**3),)
-    )
-    requested_limits = (
-        *memory_limits,
-        (
-            "process-count",
-            "RLIMIT_NPROC",
-            None if sys.platform == "darwin" else 256,
-        ),
-        ("open-files", "RLIMIT_NOFILE", 2048),
-        ("file-size", "RLIMIT_FSIZE", int(sys.argv[5])),
-        ("cpu-time", "RLIMIT_CPU", max(1, int(sys.argv[4]))),
-    )
-    for name, constant, requested in requested_limits:
-        try:
-            kind = getattr(resource, constant)
-            current_soft, current_hard = resource.getrlimit(kind)
-            value = requested
-            if requested is None:
-                value = (
-                    current_soft
-                    if current_soft != resource.RLIM_INFINITY
-                    else 4096
-                )
-            if current_hard != resource.RLIM_INFINITY:
-                value = min(value, current_hard)
-            if current_soft != resource.RLIM_INFINITY:
-                value = min(value, current_soft)
-            # Drop the hard ceiling too: an untrusted scanner must not be able
-            # to raise its soft quota back to the inherited parent maximum.
-            resource.setrlimit(kind, (value, value))
-            enforced.append(name)
-        except (AttributeError, OSError, ValueError) as exc:
-            errors.append(f"{name}:{exc}")
-temporary_report = report + ".tmp"
-with open(temporary_report, "x", encoding="utf-8") as handle:
-    json.dump({"enforced": enforced, "errors": errors}, handle)
-os.replace(temporary_report, report)
-deadline = time.monotonic() + 10
-while not os.path.exists(gate):
-    if time.monotonic() >= deadline:
-        raise SystemExit(125)
-    time.sleep(0.005)
-raise SystemExit(subprocess.run(sys.argv[6:]).returncode)
-"""
 
 
 @dataclass(slots=True)
@@ -120,6 +79,7 @@ class RawExecution:
     resource_limit_errors: tuple[str, ...] = ()
     stop_reason: str = ""
     stop_cause: StopCause | None = None
+    launch_error: str = ""
 
 
 @dataclass(slots=True)
@@ -153,8 +113,12 @@ class _BoundedPipeCollector:
                 if not isinstance(chunk, bytes) or not chunk:
                     return
                 remaining = self._maximum + 1 - len(self._payload)
-                if remaining > 0:
-                    self._payload.extend(chunk[:remaining])
+                piece = chunk[: max(0, remaining)]
+                # Concurrent scanners share one process-wide buffering budget.
+                if piece and not OUTPUT_BUDGET.reserve(len(piece)):
+                    self.exceeded.set()
+                elif piece:
+                    self._payload.extend(piece)
                 if len(self._payload) > self._maximum or len(chunk) > remaining:
                     self.exceeded.set()
         finally:
@@ -169,6 +133,7 @@ class _BoundedPipeCollector:
             raise RuntimeError(
                 "scanner output pipe did not close after process teardown"
             )
+        OUTPUT_BUDGET.release(len(self._payload))
         return bytes(self._payload)
 
 
@@ -259,6 +224,8 @@ def python_runtime_closure_sha256(
             except importlib.metadata.PackageNotFoundError:
                 continue
             pending.append(dependency)
+    # Python still processes unowned *.pth files and sitecustomize under -I.
+    records.extend(site_directory_records())
     interpreter = Path(sys.executable).resolve()
     _, interpreter_payload = read_regular_file(
         interpreter, "Python scanner interpreter", maximum_bytes=512 * 1024 * 1024
@@ -838,6 +805,13 @@ def run_command(
             *environment.sandbox_prefix[1:],
             *command,
         ]
+    if command:
+        require_windows_image(command[0])
+    # Only organization-configured sandbox template arguments may use the
+    # private-root placeholder; scanner and repository-derived arguments never.
+    template_end = (
+        len(environment.sandbox_prefix) if environment and sandbox_path else 0
+    )
     reported_command = list(command)
     started = time.monotonic()
     creation_flags = 0
@@ -862,7 +836,10 @@ def run_command(
         )
         private_runtime_environment(process_environment, private_root)
         private_command = [
-            item.replace("{PYSEC_PRIVATE_ROOT}", str(private_root)) for item in command
+            item.replace("{PYSEC_PRIVATE_ROOT}", str(private_root))
+            if 0 < index < template_end
+            else item
+            for index, item in enumerate(command)
         ]
         private_command = isolate_python_command(
             private_command, private_root / "bytecode"
@@ -871,12 +848,13 @@ def run_command(
         limit_report = private_root / "limits-applied.json"
         process_command = command
         gate = private_root / "limits-applied.gate"
+        # The trusted bootstrap reads the interpreter's own read-only stdlib
+        # bytecode (-B never writes); an empty private prefix recompiled its
+        # imports on every launch (~250 ms each on Windows).
         process_command = [
             sys.executable,
             "-I",
             "-B",
-            "-X",
-            f"pycache_prefix={private_root / 'bytecode'}",
             "-c",
             _LIMIT_GATE_BOOTSTRAP,
             str(gate),
@@ -923,12 +901,7 @@ def run_command(
             if limit_handle is not None:
                 _close_windows_handle(limit_handle)
                 limit_handle = None
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=10)
-                return process.poll() is not None
+                return kill_then_wait(process, 10)
             return _terminate_process_tree(process)
 
         if not containment_failed:
@@ -950,6 +923,7 @@ def run_command(
             environment.max_resident_memory_bytes if environment else 8 * 1024**3
         )
         next_memory_check = time.monotonic() if sys.platform == "darwin" else 0.0
+        next_scratch_check = 0.0
         if scratch_limit < 1024 * 1024:
             terminate_tree()
             raise ValueError("scanner scratch limit must be at least 1 MiB")
@@ -970,10 +944,16 @@ def run_command(
                     output_limit_exceeded = True
                     terminated = terminate_tree()
                     break
-                if _directory_size_exceeds(private_root, scratch_limit):
-                    scratch_limit_exceeded = True
-                    terminated = terminate_tree()
-                    break
+                # The tree walk is throttled; RLIMIT_FSIZE/Job quotas bound the
+                # interval and a final inclusive pass runs after exit.
+                if time.monotonic() >= next_scratch_check:
+                    if _directory_size_exceeds(private_root, scratch_limit):
+                        scratch_limit_exceeded = True
+                        terminated = terminate_tree()
+                        break
+                    next_scratch_check = (
+                        time.monotonic() + SCRATCH_CHECK_INTERVAL_SECONDS
+                    )
                 if sys.platform == "darwin" and time.monotonic() >= next_memory_check:
                     try:
                         resident_memory_limit_exceeded = (
@@ -1027,9 +1007,14 @@ def run_command(
                 raise ValueError(
                     "sandbox launcher runtime closure changed during execution"
                 )
+        # A scanner that never started, or ran without its containment, has no
+        # exit status an adapter may interpret as a clean result.
+        launch_error = launch_failure(private_root)
+        unreliable = timed_out or interruption or limit_errors or launch_error
         return RawExecution(
             command=reported_command,
-            exit_code=None if timed_out or interruption else process.returncode,
+            exit_code=None if unreliable else process.returncode,
+            launch_error=launch_error,
             stdout=stdout,
             stderr=stderr,
             duration_seconds=time.monotonic() - started,
@@ -1091,34 +1076,6 @@ def _apply_process_resource_limits(
     return tuple(report["enforced"]), tuple(report["errors"]), None
 
 
-def _directory_size_exceeds(root: Path, maximum: int) -> bool:
-    total = 0
-    entries = 0
-    pending = [root]
-    while pending:
-        directory = pending.pop()
-        try:
-            children = list(os.scandir(directory))
-        except OSError:
-            continue
-        for child in children:
-            entries += 1
-            if entries > 100_000:
-                return True
-            try:
-                if child.is_symlink():
-                    continue
-                if child.is_dir(follow_symlinks=False):
-                    pending.append(Path(child.path))
-                elif child.is_file(follow_symlinks=False):
-                    total += child.stat(follow_symlinks=False).st_size
-                    if total >= maximum:
-                        return True
-            except OSError:
-                continue
-    return False
-
-
 def _kill_process_group_after_leader_exit(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is None:
         return
@@ -1157,7 +1114,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
             taskkill_path = windows / "System32" / "taskkill.exe"
             if not taskkill_path.is_file():
                 process.kill()
-                process.wait(timeout=10)
+                wait_quietly(process, 10)
                 return process.poll() is not None
             completed = subprocess.run(  # noqa: S603  # nosec B603
                 [str(taskkill_path), "/PID", str(process.pid), "/T", "/F"],
@@ -1175,17 +1132,17 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
             hard_kill = signal.__dict__.get("SIGKILL")
             if not callable(kill_process_group) or hard_kill is None:
                 raise OSError("process-group termination is unavailable")
+            # Snapshot while the parent chain is intact: setsid() descendants
+            # leave the process group but remain reachable through it (on
+            # Linux the bootstrap subreaper also adopts double-forked orphans).
+            descendants = descendant_snapshot(process.pid)
             kill_process_group(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
+            if not wait_quietly(process, 2):
                 kill_process_group(process.pid, hard_kill)
+            kill_descendants(descendants)
     except (OSError, ProcessLookupError, subprocess.SubprocessError):
         if process.poll() is None:
             process.kill()
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
+    # A cleanup timeout must never replace the error that triggered cleanup.
+    kill_then_wait(process, 10)
     return process.poll() is not None

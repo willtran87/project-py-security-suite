@@ -406,12 +406,12 @@ class CosignRuntimeTests(unittest.TestCase):
     def test_cosign_rechecks_integrity_when_all_bundles_are_missing(self) -> None:
         self.artifact.write_bytes(b"wheel")
         executable = self.root / "cosign.exe"
-        executable.write_bytes(b"approved executable")
+        executable.write_bytes(b"MZ approved executable")
         adapter = self._adapter()
         adapter.config.executable = str(executable)
 
         def mutate_after_version(*_args: object) -> str:
-            executable.write_bytes(b"changed executable")
+            executable.write_bytes(b"MZ changed executable")
             return "cosign 3"
 
         with patch.object(adapter, "_detect_version", side_effect=mutate_after_version):
