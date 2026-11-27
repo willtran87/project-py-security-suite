@@ -6,6 +6,9 @@ import hashlib
 import importlib.util
 import json
 import marshal
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -19,6 +22,10 @@ from py_security_suite.adapters.bandit import BanditAdapter
 from py_security_suite.adapters.common import (
     contains_regular_file,
     native_suppression_markers,
+)
+from py_security_suite.adapters.detect_secrets import (
+    INLINE_ALLOWLIST_FILTER,
+    DetectSecretsAdapter,
 )
 from py_security_suite.adapters.gitleaks import GitleaksAdapter
 from py_security_suite.adapters.hadolint import HadolintAdapter
@@ -195,6 +202,42 @@ class NativeSuppressionFlagTests(_TemporaryRoot):
                 "semgrep", self.root
             ),
         )
+
+
+class DetectSecretsAllowlistTests(_TemporaryRoot):
+    def test_inline_allowlist_pragmas_are_disabled_for_targets(self) -> None:
+        (self.root / "app.py").write_text("x = 1\n", encoding="utf-8")
+        command = DetectSecretsAdapter(ToolConfig(), 4096).build_command(
+            "detect-secrets", self.root
+        )
+        index = command.index("--disable-filter")
+        self.assertEqual(command[index + 1], INLINE_ALLOWLIST_FILTER)
+        suite_command = DetectSecretsAdapter(ToolConfig(), 4096).build_command(
+            "detect-secrets", Path(__file__).resolve().parents[1]
+        )
+        self.assertNotIn("--disable-filter", suite_command)
+
+    def test_pinned_detect_secrets_reports_allowlisted_secret(self) -> None:
+        configured = os.environ.get("PYSEC_TEST_DETECT_SECRETS")
+        executable = (
+            Path(configured)
+            if configured
+            else Path(sys.prefix) / "Scripts" / "detect-secrets.exe"
+        )
+        if not executable.is_file():
+            executable = Path(sys.prefix) / "bin" / "detect-secrets"
+        if not executable.is_file():
+            self.skipTest("detect-secrets is not installed in this environment")
+        token = "ghp_" + "opTEIy39wHRhXPzb8LPRweTAUj4kT35wmqyS"
+        (self.root / "c.py").write_text(
+            f'token = "{token}"  # pragma: allowlist secret\n', encoding="utf-8"
+        )
+        adapter = DetectSecretsAdapter(ToolConfig(), 1 << 20)
+        command = adapter.build_command(str(executable), self.root)
+        completed = subprocess.run(  # noqa: S603  # nosec B603
+            command, cwd=self.root, capture_output=True, text=True, check=True
+        )
+        self.assertTrue(adapter.parse(completed.stdout, self.root))
 
 
 class FailureExitTests(_TemporaryRoot):

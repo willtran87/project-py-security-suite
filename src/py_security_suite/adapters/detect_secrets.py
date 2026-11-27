@@ -23,6 +23,8 @@ from .base import ScannerAdapter
 # suite-specific exclusions below; every other target is scanned in full.
 _SUITE_REPOSITORY = Path(__file__).resolve().parents[3]
 
+INLINE_ALLOWLIST_FILTER = "detect_secrets.filters.allowlist.is_line_allowlisted"
+
 _GENERIC_SKIPPED_ROOTS = frozenset(
     {
         ".artifacts",
@@ -108,6 +110,10 @@ class DetectSecretsAdapter(ScannerAdapter):
             "--all-files",
             "--no-verify",
             *public_digest_filter,
+            # Third-party targets must not self-suppress with inline
+            # "pragma: allowlist secret" comments; only the suite's own
+            # reviewed checkout keeps its governed allowlist pragmas.
+            *(() if suite else ("--disable-filter", INLINE_ALLOWLIST_FILTER)),
             "--exclude-files",
             _SUITE_EXCLUDES if suite else _GENERIC_EXCLUDES,
         ]
