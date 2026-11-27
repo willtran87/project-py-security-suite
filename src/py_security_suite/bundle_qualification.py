@@ -32,6 +32,11 @@ def qualify_bundle(
     required_effectiveness_tools: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Join static adapter contracts and activation-free scanner readiness."""
+    _effectiveness_limits(
+        minimum_effectiveness_labels,
+        minimum_effectiveness_tools,
+        required_effectiveness_tools,
+    )
     if config.profile in {"production", "release"}:
         minimum_effectiveness_labels = max(minimum_effectiveness_labels, 200)
         minimum_effectiveness_tools = max(minimum_effectiveness_tools, 3)

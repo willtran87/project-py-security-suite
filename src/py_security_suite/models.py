@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -222,6 +222,10 @@ def normalize_repo_path(target: Path, path: str | Path) -> str:
     normalized = candidate.as_posix()
     if normalized.startswith("./"):
         normalized = normalized[2:]
+    # A POSIX-relative component such as "C:" ("./C:/x") would read as a
+    # drive-absolute path to Windows consumers of the report.
+    if re.match(r"^[a-zA-Z]:(?:/|$)", normalized):
+        return "<outside-target>"
     return normalized or "."
 
 
@@ -249,12 +253,17 @@ def finding_identity(
 
 
 def json_ready(value: Any) -> Any:
+    if value is None or type(value) in (str, int, float, bool):
+        return value
     if isinstance(value, StrEnum):
         return str(value)
     if isinstance(value, Path):
         return value.as_posix()
     if is_dataclass(value) and not isinstance(value, type):
-        return {key: json_ready(item) for key, item in asdict(cast(Any, value)).items()}
+        return {
+            item.name: json_ready(getattr(value, item.name))
+            for item in fields(cast(Any, value))
+        }
     if isinstance(value, dict):
         return {str(key): json_ready(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

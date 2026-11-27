@@ -80,6 +80,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "assurance-profile-registry-1.0": "assurance-profile-registry-1.0.schema.json",
     "assurance-catalog-export-1.0": "assurance-catalog-export-1.0.schema.json",
     "control-assessment-1.0": "control-assessment-1.0.schema.json",
+    "dependency-surface-1.2": "dependency-surface-1.2.schema.json",
     "dependency-surface-1.1": "dependency-surface-1.1.schema.json",
     "domain-assurance-1.0": "domain-assurance-1.0.schema.json",
     "domain-assurance-policy-1.0": "domain-assurance-policy-1.0.schema.json",

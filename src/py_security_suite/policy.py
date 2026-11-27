@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .config import SuiteConfig
-from .models import Finding, FindingStatus, Inventory, Outcome, ToolRun, ToolStatus
+from .models import (
+    Finding,
+    FindingStatus,
+    Inventory,
+    Outcome,
+    Severity,
+    ToolRun,
+    ToolStatus,
+)
 from .risk_acceptance import apply_risk_acceptances
 
 
@@ -69,6 +77,7 @@ def evaluate_policy(
     network_isolation_attested: bool,
     inventory: Inventory | None = None,
     context_errors: list[str] | None = None,
+    diagnostic_without_isolation: bool = False,
 ) -> PolicyDecision:
     reasons: list[str] = list(context_errors or [])
     by_tool = {run.tool: run for run in tool_runs}
@@ -77,8 +86,14 @@ def evaluate_policy(
             findings,
             config.policy.risk_acceptance_path,
             config.policy.risk_acceptance_sha256,
+            profile=config.profile,
         )
     )
+    if diagnostic_without_isolation:
+        reasons.append(
+            "diagnostic scan ran without external network-isolation attestation; "
+            "the result cannot pass policy"
+        )
 
     if config.isolation.require_attestation and not network_isolation_attested:
         reasons.append(
@@ -95,9 +110,20 @@ def evaluate_policy(
         and inventory.source_sha256
         and not inventory.source_integrity_verified
     ):
+        changed = bool(inventory.source_sha256_after) and (
+            inventory.source_sha256,
+            inventory.hashed_files,
+            inventory.hashed_bytes,
+        ) != (
+            inventory.source_sha256_after,
+            inventory.hashed_files_after,
+            inventory.hashed_bytes_after,
+        )
         reasons.append(
             "target content changed during scanner execution; discard the "
             "result and investigate scanner or concurrent-process writes"
+            if changed
+            else "post-scan source integrity was not verified; the result is incomplete"
         )
 
     explicitly_required = set(config.policy.required_scanners)
@@ -137,15 +163,27 @@ def evaluate_policy(
             "artifact-provenance",
             "build-provenance",
         }
+        # Production and release cannot prove an unrated finding is below the
+        # blocking threshold, so UNKNOWN severity fails closed there.
+        unrated = (
+            config.profile in {"production", "release"}
+            and finding.severity is Severity.UNKNOWN
+        )
         finding.blocking = (
             finding.severity in config.policy.block_severities
             or known_exploited
             or release_provenance
+            or unrated
         )
         if finding.blocking:
             blocked += 1
 
     if reasons:
+        if blocked:
+            reasons.append(
+                f"{blocked} finding(s) already meet blocking criteria; the scan "
+                "would FAIL even if it were complete"
+            )
         return PolicyDecision(Outcome.INCOMPLETE, reasons)
     if blocked:
         severities = ", ".join(

@@ -50,13 +50,15 @@ def analyze_python_bytecode(payload: bytes) -> list[list[int | str]]:
             for constant in code.co_consts
             if isinstance(constant, types.CodeType)
         )
+        current_line: int | None = None
         try:
             instructions = dis.get_instructions(code)
             for instruction in instructions:
                 instruction_count += 1
                 if instruction_count > _MAX_INSTRUCTIONS:
                     raise ValueError("Python bytecode instruction limit exceeded")
-                line = max(1, instruction.starts_line or code.co_firstlineno)
+                current_line = _instruction_line(instruction) or current_line
+                line = max(1, current_line or code.co_firstlineno)
                 if instruction.opname == "IMPORT_NAME" and isinstance(
                     instruction.argval, str
                 ):
@@ -71,3 +73,24 @@ def analyze_python_bytecode(payload: bytes) -> list[list[int | str]]:
         except (IndexError, KeyError, SystemError, TypeError, ValueError) as exc:
             raise ValueError("Python bytecode instruction stream is invalid") from exc
     return [list(edge) for edge in sorted(edges)]
+
+
+def _instruction_line(instruction: dis.Instruction) -> int | None:
+    """Return an instruction's source line on Python 3.11 through 3.14+.
+
+    Python 3.13 turned ``Instruction.starts_line`` into a bool and added
+    ``line_number``; 3.11 and 3.12 expose an int ``starts_line`` only on the
+    first instruction of a line. ``positions.lineno`` is per instruction on
+    every supported version.
+    """
+    line_number = getattr(instruction, "line_number", None)
+    if isinstance(line_number, int) and not isinstance(line_number, bool):
+        return line_number
+    positions = getattr(instruction, "positions", None)
+    lineno = getattr(positions, "lineno", None)
+    if isinstance(lineno, int) and not isinstance(lineno, bool):
+        return lineno
+    starts_line: object = instruction.starts_line
+    if isinstance(starts_line, int) and not isinstance(starts_line, bool):
+        return starts_line
+    return None

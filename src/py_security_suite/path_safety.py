@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import stat
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 from collections.abc import Iterator
 
@@ -179,8 +180,8 @@ def read_regular_file(
         label,
         maximum_bytes=maximum_bytes,
         boundary=boundary,
-    ) as (resolved, handle, _):
-        payload = handle.read(maximum_bytes + 1)
+    ) as (resolved, handle, observed_size):
+        payload = handle.read(min(maximum_bytes, observed_size) + 1)
         if len(payload) > maximum_bytes:
             raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
         return resolved, payload
@@ -444,3 +445,51 @@ def resolve_regular_directory(path: Path, label: str) -> Path:
     if not resolved.is_dir():
         raise ValueError(f"{label} is not a regular directory: {resolved}")
     return resolved
+
+
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$"}
+    | {f"{prefix}{suffix}" for prefix in ("COM", "LPT") for suffix in "0123456789¹²³"}
+)
+
+
+def portable_archive_member(name: str) -> PurePosixPath:
+    """Return ``name`` as a portable relative archive path or raise ``ValueError``.
+
+    Drive prefixes (``C:x``), alternate data streams, NUL and control
+    characters, backslashes, empty/``.``/``..`` components, trailing dots or
+    spaces (which Windows strips), and reserved device names are rejected so a
+    member cannot address anything outside its extraction root on any platform.
+    """
+    if not name or len(name) > 4096:
+        raise ValueError(f"unsafe archive member path: {name!r}")
+    if "\\" in name or ":" in name or any(ord(character) < 32 for character in name):
+        raise ValueError(f"unsafe archive member path: {name!r}")
+    trimmed = name[:-1] if name.endswith("/") else name
+    if trimmed.startswith("/"):
+        raise ValueError(f"unsafe archive member path: {name!r}")
+    parts = trimmed.split("/")
+    for part in parts:
+        if part in {"", ".", ".."} or part != part.rstrip(" ."):
+            raise ValueError(f"unsafe archive member path: {name!r}")
+        if part.split(".", 1)[0].rstrip(" ").upper() in _WINDOWS_RESERVED_NAMES:
+            raise ValueError(f"archive member uses a reserved device name: {name!r}")
+    return PurePosixPath(*parts)
+
+
+def archive_member_key(member: PurePosixPath) -> str:
+    """Return the collision key for case-insensitive, normalizing filesystems."""
+    return unicodedata.normalize("NFC", member.as_posix()).casefold()
+
+
+def contained_archive_destination(root: Path, member: PurePosixPath) -> Path:
+    """Join ``member`` below ``root`` and prove the resolved path stays inside."""
+    base = root.resolve()
+    candidate = base.joinpath(*member.parts)
+    try:
+        candidate.resolve().relative_to(base)
+    except ValueError as exc:
+        raise ValueError(
+            f"archive member escapes extraction root: {member.as_posix()!r}"
+        ) from exc
+    return candidate

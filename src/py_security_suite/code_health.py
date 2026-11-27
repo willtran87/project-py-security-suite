@@ -29,6 +29,7 @@ _SKIP = frozenset(
         ".venv",
         "build",
         "dist",
+        "framework-canaries",
         "node_modules",
         "tests",
     }
