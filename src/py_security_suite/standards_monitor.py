@@ -584,7 +584,19 @@ def _extract_semantic_sections(payload: bytes, media_type: str) -> dict[str, str
                 or element.attrib.get("name")
                 or f"{element.tag}[{index}]"
             )
-            text_value = _normalize_text(" ".join(element.itertext()))
+            # Each element contributes only its own text and its children's
+            # tails, so every text node lands in exactly one section. Joining
+            # the full itertext() of every element was O(N^2) on deep XML.
+            text_value = _normalize_text(
+                " ".join(
+                    part
+                    for part in (
+                        element.text,
+                        *(child.tail for child in element),
+                    )
+                    if part
+                )
+            )
             if text_value:
                 sections[str(identifier)] = text_value
         return sections

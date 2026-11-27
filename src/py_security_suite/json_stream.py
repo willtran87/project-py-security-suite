@@ -56,6 +56,14 @@ def iter_model_json(value: Any) -> Iterator[bytes]:
             if isinstance(item, float) and not math.isfinite(item):
                 raise ValueError("report recovery JSON number must be finite")
             if isinstance(item, str):
+                try:
+                    item.encode("utf-8")
+                except UnicodeEncodeError as exc:
+                    # strict_json.loads rejects unpaired surrogates, so the
+                    # recovery reader could never read this document back.
+                    raise ValueError(
+                        "report recovery JSON string contains an unpaired surrogate"
+                    ) from exc
                 yield json.encoder.encode_basestring_ascii(item).encode("utf-8")
             elif item is None:
                 yield b"null"

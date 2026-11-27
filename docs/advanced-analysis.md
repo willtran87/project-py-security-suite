@@ -190,10 +190,18 @@ sink correlation without multiplying scanner findings. Portable SARIF output
 preserves the retained location set and its completeness summary.
 SARIF result-state semantics are normalized before findings enter correlation.
 Explicit `pass`, `notApplicable`, and baseline `absent` results are not treated
-as active findings; unknown or future states remain reviewable. Native
+as active findings; unknown or future states remain reviewable and keep their
+failure-level severity. Native
 suppression states are retained as bounded counts only and remain informational:
 an accepted scanner or source suppression does not replace the suite's
-digest-bound policy acceptance process.
+digest-bound policy acceptance process. Target-controlled inline suppressions
+are disabled where the scanner allows it (Bandit `--ignore-nosec`, Semgrep
+`--disable-nosem`, Gitleaks `--ignore-gitleaks-allow` with a suite-owned
+configuration and empty ignore file). Where a scanner always honours them
+(a root `.gitleaksignore`, TruffleHog `trufflehog:ignore` comments), each
+occurrence is reported as an unaccepted HIGH finding instead. A scanner that
+exits with its findings code but emits no machine-readable results, or whose
+report file is missing, is recorded as a parse error rather than a clean pass.
 Rule attribution follows both SARIF `ruleId` and positional `ruleIndex`
 references across the tool driver and `tool.extensions`. An absent component
 reference selects the driver; an extension index or unique component GUID

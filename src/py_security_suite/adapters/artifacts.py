@@ -7,12 +7,18 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import IO
 
 from ..config import ToolConfig
 from ..models import normalize_repo_path
-from ..path_safety import is_link_like, resolve_unlinked_path
+from ..path_safety import (
+    archive_member_key,
+    contained_archive_destination,
+    is_link_like,
+    portable_archive_member,
+    resolve_unlinked_path,
+)
 
 _MAX_ARCHIVE_MEMBERS = 100_000
 _MAX_MEMBER_BYTES = 512 * 1024 * 1024
@@ -99,28 +105,61 @@ def extracted_distribution_tree(target: Path, config: ToolConfig) -> Iterator[Pa
         prefix="pysec-artifacts-", ignore_cleanup_errors=True
     ) as temporary:
         root = Path(temporary).resolve()
+        # One expansion budget spans every distribution, so many archives
+        # cannot each consume the full per-scan allowance.
+        budget = _ExtractionBudget()
         for index, artifact in enumerate(distribution_files(target, config)):
             destination = root / f"{index:04d}-{artifact.name}"
             destination.mkdir()
             if artifact.suffix.casefold() in {".whl", ".zip"}:
-                _extract_zip(artifact, destination)
+                _extract_zip(artifact, destination, budget)
             elif artifact.name.casefold().endswith(".tar.gz"):
-                _extract_tar(artifact, destination)
+                _extract_tar(artifact, destination, budget)
         yield root
 
 
-def _safe_destination(root: Path, member_name: str) -> Path:
+class _ExtractionBudget:
+    """Global member and expanded-byte allowance across all archives."""
+
+    def __init__(self) -> None:
+        self.members = 0
+        self.total_bytes = 0
+
+    def admit(self, size: int) -> None:
+        self.members += 1
+        if self.members > _MAX_ARCHIVE_MEMBERS:
+            raise ValueError("archives contain too many members in total")
+        if size < 0:
+            raise ValueError(f"archive member has an invalid size: {size}")
+        self.total_bytes += size
+        if self.total_bytes > _MAX_TOTAL_BYTES:
+            raise ValueError("archives exceed the total expansion limit")
+
+
+class _MemberLedger:
+    """Reject duplicate, case-colliding, or NFC-colliding members per archive."""
+
+    def __init__(self) -> None:
+        self._kinds: dict[str, bool] = {}
+
+    def claim(self, member: PurePosixPath, *, directory: bool) -> None:
+        key = archive_member_key(member)
+        existing = self._kinds.get(key)
+        if existing is not None and not (existing and directory):
+            raise ValueError(
+                f"archive members collide on a case-insensitive or normalizing "
+                f"filesystem: {member.as_posix()!r}"
+            )
+        self._kinds[key] = directory
+
+
+def _member_path(member_name: str) -> PurePosixPath | None:
     normalized = member_name.replace("\\", "/")
-    if not normalized or normalized.startswith("/"):
-        raise ValueError(f"unsafe archive member path: {member_name!r}")
-    candidate = (root / normalized).resolve()
-    try:
-        candidate.relative_to(root.resolve())
-    except ValueError as exc:
-        raise ValueError(
-            f"archive member escapes extraction root: {member_name!r}"
-        ) from exc
-    return candidate
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    if normalized in {"", ".", "./"}:
+        return None
+    return portable_archive_member(normalized)
 
 
 def _copy_limited(source: IO[bytes], destination: Path, size: int) -> int:
@@ -144,35 +183,49 @@ def _copy_limited(source: IO[bytes], destination: Path, size: int) -> int:
     return copied
 
 
-def _extract_zip(archive: Path, root: Path) -> None:
-    total = 0
+def _extract_zip(
+    archive: Path, root: Path, budget: _ExtractionBudget | None = None
+) -> None:
+    budget = budget or _ExtractionBudget()
+    ledger = _MemberLedger()
     with zipfile.ZipFile(archive) as package:
         members = package.infolist()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise ValueError("archive contains too many members")
         for member in members:
-            destination = _safe_destination(root, member.filename)
+            relative = _member_path(member.filename)
+            if relative is None:
+                raise ValueError(f"unsafe archive member path: {member.filename!r}")
+            ledger.claim(relative, directory=member.is_dir())
+            destination = contained_archive_destination(root, relative)
             unix_mode = member.external_attr >> 16
             if unix_mode and stat.S_ISLNK(unix_mode):
                 raise ValueError(f"archive links are not allowed: {member.filename}")
             if member.is_dir():
                 destination.mkdir(parents=True, exist_ok=True)
                 continue
-            total += member.file_size
-            if total > _MAX_TOTAL_BYTES:
-                raise ValueError("archive exceeds the total expansion limit")
+            budget.admit(member.file_size)
             with package.open(member) as source:
                 _copy_limited(source, destination, member.file_size)
 
 
-def _extract_tar(archive: Path, root: Path) -> None:
-    total = 0
+def _extract_tar(
+    archive: Path, root: Path, budget: _ExtractionBudget | None = None
+) -> None:
+    budget = budget or _ExtractionBudget()
+    ledger = _MemberLedger()
     with tarfile.open(archive, mode="r:gz") as package:
         members = package.getmembers()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise ValueError("archive contains too many members")
         for member in members:
-            destination = _safe_destination(root, member.name)
+            relative = _member_path(member.name)
+            if relative is None:
+                if member.isdir():
+                    continue
+                raise ValueError(f"unsafe archive member path: {member.name!r}")
+            ledger.claim(relative, directory=member.isdir())
+            destination = contained_archive_destination(root, relative)
             if member.isdir():
                 destination.mkdir(parents=True, exist_ok=True)
                 continue
@@ -180,9 +233,7 @@ def _extract_tar(archive: Path, root: Path) -> None:
                 raise ValueError(
                     f"archive links and special files are not allowed: {member.name}"
                 )
-            total += member.size
-            if total > _MAX_TOTAL_BYTES:
-                raise ValueError("archive exceeds the total expansion limit")
+            budget.admit(member.size)
             source = package.extractfile(member)
             if source is None:
                 raise ValueError(f"could not read archive member: {member.name}")

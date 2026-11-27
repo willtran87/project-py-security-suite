@@ -23,7 +23,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/risk_paths.py": 7_265,
     "src/py_security_suite/reports.py": 7_744,
     "src/py_security_suite/data_exposure.py": 3_778,
-    "src/py_security_suite/evidence_ingest.py": 2_521,
+    "src/py_security_suite/evidence_ingest.py": 2_511,
     "src/py_security_suite/artifact_validation.py": 2_405,
     "src/py_security_suite/benchmark_execution.py": 2_432,
     "src/py_security_suite/benchmark_adapters.py": 3_130,

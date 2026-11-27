@@ -471,6 +471,21 @@ def _python_environments(document: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+_PEP508_NAME = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
+_PEP508_VERSION = r"(?:===|~=|==|!=|<=|>=|<|>)\s*[A-Za-z0-9.*+!_-]+"
+# Name-based PEP 508 requirements only: a distribution name, optional extras,
+# optional version specifiers and an optional environment marker. Paths,
+# archives, VCS and direct URL references are rejected so the dry run can only
+# select wheels from the declared wheelhouse.
+_PEP508_REQUIREMENT = re.compile(
+    rf"{_PEP508_NAME}"
+    rf"(?:\s*\[\s*{_PEP508_NAME}(?:\s*,\s*{_PEP508_NAME})*\s*\])?"
+    rf"(?:\s*\(?\s*{_PEP508_VERSION}(?:\s*,\s*{_PEP508_VERSION})*\s*\)?)?"
+    r"(?:\s*;\s*[A-Za-z0-9_.'\"<>=!~ ()-]+)?",
+    re.ASCII,
+)
+
+
 def _requirement_text(value: object) -> str:
     text = str(value or "").strip()
     if (
@@ -479,9 +494,13 @@ def _requirement_text(value: object) -> str:
         or text.startswith("-")
         or any(character in text for character in "\r\n\x00")
         or "://" in text
-        or " @ " in text
+        or "@" in text
+        or _PEP508_REQUIREMENT.fullmatch(text) is None
     ):
-        raise ValueError("python requirements must be bounded registry requirements")
+        raise ValueError(
+            "python requirements must be bounded PEP 508 name-based registry "
+            "requirements"
+        )
     return text
 
 
@@ -502,6 +521,9 @@ def _resolve_environment(
             "--ignore-installed",
             "--isolated",
             "--no-index",
+            # Never build an sdist during verification: building runs the
+            # bundle-supplied ``setup.py`` and build backends on this host.
+            "--only-binary=:all:",
             "--find-links",
             str(wheelhouse),
             "--report",
