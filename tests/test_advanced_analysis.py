@@ -785,10 +785,12 @@ class AdvancedAnalysisTests(unittest.TestCase):
     def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
         self,
     ) -> None:
-        result_secret = "result_secret_must_not_survive"
-        bearer_secret = "bearer_secret_must_not_survive"
-        userinfo_secret = "user:password_must_not_survive"
-        uri_secret = "uri_user:uri_password_must_not_survive"
+        result_secret = "result_secret_must_not_survive"  # pragma: allowlist secret
+        bearer_secret = "bearer_secret_must_not_survive"  # pragma: allowlist secret
+        userinfo_secret = "user:password_must_not_survive"  # pragma: allowlist secret
+        uri_secret = (
+            "uri_user:uri_password_must_not_survive"  # pragma: allowlist secret
+        )
         payload = json.dumps(
             {
                 "runs": [

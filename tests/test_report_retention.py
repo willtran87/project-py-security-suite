@@ -33,7 +33,7 @@ class ReportRetentionTests(unittest.TestCase):
             )
             for artifact, schema in {
                 "boundary-graph.json": "boundary-graph-1.0",
-                "dependency-surface.json": "dependency-surface-1.1",
+                "dependency-surface.json": "dependency-surface-1.2",
                 "isolation-boundary.json": "isolation-boundary-1.0",
                 "isolation-probe.json": "isolation-probe-1.0",
                 "report-security.json": "report-security-1.0",

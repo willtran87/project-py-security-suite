@@ -428,7 +428,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                     "missing_dependencies": 0,
                     "cyclic_dependencies": 0,
                     "conflicting_dependencies": {"packages": 0, "edges": 0},
-                    "password": "do-not-publish",
+                    "password": "do-not-publish",  # pragma: allowlist secret
                 }
             ).encode()
         ).hexdigest(),
@@ -572,7 +572,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             "missing_dependencies": 0,
             "cyclic_dependencies": 0,
             "conflicting_dependencies": {"packages": 0, "edges": 0},
-            "password": "do-not-publish",
+            "password": "do-not-publish",  # pragma: allowlist secret
         }
     )
     executable = Path(sys.executable).resolve()

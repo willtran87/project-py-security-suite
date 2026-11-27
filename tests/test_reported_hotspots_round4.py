@@ -216,10 +216,10 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(_uri_path("src/example%20file.py"), "src/example file.py")
         self.assertEqual(_uri_path("file:///C:/repo/app.py"), "C:/repo/app.py")
         self.assertEqual(_uri_path("C:/repo/app.py"), "C:/repo/app.py")
-        self.assertEqual(
-            _uri_path("https://user:secret@example.test/app.py"),
-            "<external-artifact>",
+        external_uri = (
+            "https://user:secret@example.test/app.py"  # pragma: allowlist secret
         )
+        self.assertEqual(_uri_path(external_uri), "<external-artifact>")
         self.assertIsNone(sarif_integer([]))
         self.assertIsNone(sarif_safe_uri("relative"))
 
@@ -283,7 +283,11 @@ class SarifNormalizationContractTests(unittest.TestCase):
             (
                 "external",
                 {"uri": "sink.py", "uriBaseId": "REMOTE"},
-                {"REMOTE": {"uri": "https://user:secret@example.test/repository/"}},
+                {
+                    "REMOTE": {
+                        "uri": "https://user:secret@example.test/repository/"  # pragma: allowlist secret -- deliberately invalid SARIF fixture
+                    }
+                },
                 "external-uri-base",
             ),
             (
@@ -339,7 +343,9 @@ class SarifNormalizationContractTests(unittest.TestCase):
 
     def test_sarif_rejects_nonlocal_file_uri_authorities(self) -> None:
         path, resolution = _artifact_path(
-            {"uri": "file://user:secret@server.example/src/sink.py"},
+            {
+                "uri": "file://user:secret@server.example/src/sink.py"  # pragma: allowlist secret -- deliberately invalid SARIF fixture
+            },
             self.root,
             uri_bases={},
         )
@@ -431,7 +437,11 @@ class SarifNormalizationContractTests(unittest.TestCase):
             self.root,
             uri_bases={},
             artifacts=[
-                {"location": {"uri": "https://user:secret@example.test/src/sink.py"}}
+                {
+                    "location": {
+                        "uri": "https://user:secret@example.test/src/sink.py"  # pragma: allowlist secret -- deliberately invalid SARIF fixture
+                    }
+                }
             ],
         )
 
@@ -516,7 +526,9 @@ class SarifNormalizationContractTests(unittest.TestCase):
         )
 
     def test_sarif_suppressions_are_evidence_not_policy_acceptance(self) -> None:
-        justification_secret = "suppression-justification-must-not-be-retained"
+        justification_secret = (
+            "suppression-justification-must-not-be-retained"  # pragma: allowlist secret
+        )
         payload = json.dumps(
             {
                 "runs": [

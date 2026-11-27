@@ -79,6 +79,14 @@ class SecurityPropertyTests(unittest.TestCase):
                 "<outside-target>",
             )
 
+    def test_normalize_repo_path_rejects_drive_like_results(self) -> None:
+        # Regression for a parser-fuzz crash: "./t:/t" bypassed the raw
+        # drive-letter check on POSIX and normalized to "t:/t".
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            for raw in ("./t:/t", "./C:", "C:/x"):
+                self.assertEqual(normalize_repo_path(target, raw), "<outside-target>")
+
     def test_normalize_repo_path_treats_backslashes_as_separators(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)

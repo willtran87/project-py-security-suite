@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,7 +69,7 @@ class CodeQlGuardTests(unittest.TestCase):
         self.assertIsNone(adapter.not_applicable_reason(self.root))
         self.assertEqual(
             adapter.build_command("run-codeql", self.root),
-            ["run-codeql", "--lang", "python", "--config", "", "--quiet"],
+            ["run-codeql", "--lang", "python", "--config=", "--quiet"],
         )
         finding_payload = json.dumps(
             {
@@ -160,12 +159,12 @@ class CodeQlGuardTests(unittest.TestCase):
     def test_environment_and_version_detection_are_bounded(self) -> None:
         adapter = self._adapter()
         adapter._auxiliary_path = self.executable
+        adapter._auxiliary_sha256 = "a" * 64
         environment = adapter.environment()
-        self.assertEqual(environment.extra["HOME"], str(self.home.resolve()))
-        self.assertEqual(environment.extra["USERPROFILE"], str(self.home.resolve()))
+        self.assertNotIn("PATH", environment.extra)
         self.assertEqual(environment.extra["RCQL_DOWNLOAD_RETRY_ATTEMPTS"], "1")
         self.assertEqual(
-            Path(environment.extra["PATH"].split(os.pathsep)[0]), self.executable.parent
+            environment.auxiliary_executables, ((str(self.executable), "a" * 64),)
         )
         cases = (
             (_execution(["codeql"], exit_code=1), "unknown"),
@@ -208,7 +207,7 @@ class CodeQlGuardTests(unittest.TestCase):
         cases = ("multiple", "oversized", "malformed", "changed")
         for case in cases:
             with self.subTest(case=case):
-                adapter = self._adapter()
+                adapter = self._adapter(include_home=False)
 
                 def execute(
                     command: list[str], case: str = case, **kwargs: object
