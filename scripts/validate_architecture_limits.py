@@ -22,7 +22,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_maturity_product_catalog.py": 32,
     "src/py_security_suite/industry_emerging_assurance_catalog.py": 37,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
-    "src/py_security_suite/risk_paths.py": 7_265,
+    "src/py_security_suite/risk_paths.py": 1_196,
     "src/py_security_suite/reports.py": 380,
     "src/py_security_suite/data_exposure.py": 3_778,
     "src/py_security_suite/evidence_ingest.py": 2_511,
@@ -81,7 +81,7 @@ _FUNCTION_LINE_LIMITS = {
         "src/py_security_suite/benchmark_evidence.py",
         "verify_benchmark_evidence_documents",
     ): 314,
-    ("src/py_security_suite/risk_paths.py", "_owner_work_queues"): 312,
+    ("src/py_security_suite/risk_path_owner_queues.py", "_owner_work_queues"): 312,
     (
         "src/py_security_suite/industry_assurance.py",
         "_assurance_case_assessment",

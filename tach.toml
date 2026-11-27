@@ -603,7 +603,59 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.config", "py_s
 
 [[modules]]
 path = "py_security_suite.risk_paths"
-depends_on = ["py_security_suite.ownership", "py_security_suite.models", "py_security_suite.prioritization", "py_security_suite.validation_alignment", "py_security_suite.risk_path_values", "py_security_suite.risk_path_summary"]
+depends_on = ["py_security_suite.ownership", "py_security_suite.models", "py_security_suite.risk_path_values", "py_security_suite.risk_path_summary", "py_security_suite.risk_path_lifecycle", "py_security_suite.risk_path_evidence", "py_security_suite.risk_path_common", "py_security_suite.risk_path_owner_queues", "py_security_suite.risk_path_secrets", "py_security_suite.risk_path_sensitive_routes", "py_security_suite.risk_path_dependencies", "py_security_suite.risk_path_structural", "py_security_suite.risk_path_campaigns", "py_security_suite.risk_path_routes", "py_security_suite.risk_path_validation", "py_security_suite.risk_path_targets", "py_security_suite.risk_path_ownership"]
+
+[[modules]]
+path = "py_security_suite.risk_path_common"
+depends_on = ["py_security_suite.models", "py_security_suite.validation_alignment"]
+
+[[modules]]
+path = "py_security_suite.risk_path_campaigns"
+depends_on = ["py_security_suite.risk_path_values", "py_security_suite.models", "py_security_suite.validation_alignment", "py_security_suite.ownership", "py_security_suite.risk_path_common"]
+
+[[modules]]
+path = "py_security_suite.risk_path_dependencies"
+depends_on = ["py_security_suite.risk_path_values", "py_security_suite.risk_path_validation", "py_security_suite.risk_path_common"]
+
+[[modules]]
+path = "py_security_suite.risk_path_evidence"
+depends_on = ["py_security_suite.models", "py_security_suite.risk_path_common", "py_security_suite.risk_path_values"]
+
+[[modules]]
+path = "py_security_suite.risk_path_lifecycle"
+depends_on = ["py_security_suite.risk_path_common", "py_security_suite.risk_path_values"]
+
+[[modules]]
+path = "py_security_suite.risk_path_owner_queues"
+depends_on = ["py_security_suite.risk_path_values", "py_security_suite.risk_path_validation", "py_security_suite.risk_path_common"]
+
+[[modules]]
+path = "py_security_suite.risk_path_ownership"
+depends_on = ["py_security_suite.ownership", "py_security_suite.risk_path_values"]
+
+[[modules]]
+path = "py_security_suite.risk_path_routes"
+depends_on = ["py_security_suite.risk_path_dependencies", "py_security_suite.risk_path_common", "py_security_suite.models", "py_security_suite.risk_path_evidence", "py_security_suite.risk_path_values"]
+
+[[modules]]
+path = "py_security_suite.risk_path_secrets"
+depends_on = ["py_security_suite.risk_path_common", "py_security_suite.risk_path_values", "py_security_suite.models"]
+
+[[modules]]
+path = "py_security_suite.risk_path_sensitive_routes"
+depends_on = ["py_security_suite.risk_path_values", "py_security_suite.risk_path_common"]
+
+[[modules]]
+path = "py_security_suite.risk_path_structural"
+depends_on = ["py_security_suite.risk_path_values", "py_security_suite.risk_path_common"]
+
+[[modules]]
+path = "py_security_suite.risk_path_targets"
+depends_on = ["py_security_suite.models", "py_security_suite.risk_path_common", "py_security_suite.risk_path_dependencies", "py_security_suite.prioritization", "py_security_suite.risk_path_validation", "py_security_suite.risk_path_values", "py_security_suite.risk_path_lifecycle", "py_security_suite.risk_path_evidence"]
+
+[[modules]]
+path = "py_security_suite.risk_path_validation"
+depends_on = ["py_security_suite.risk_path_common", "py_security_suite.risk_path_values"]
 
 [[modules]]
 path = "py_security_suite.runtime_reachability"
