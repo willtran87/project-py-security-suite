@@ -27,7 +27,7 @@ timeout_seconds = 300
 enabled = true
 executable = "/usr/local/bin/semgrep"
 timeout_seconds = 600
-rules_path = "/opt/pysec-suite/src/py_security_suite/rules/python-security.yml"
+rules_path = "/opt/pysec-suite/rules/python-security.yml"
 
 [tools.detect-secrets]
 rules_path = "/workspace/security/self-scan-public-digests.json"

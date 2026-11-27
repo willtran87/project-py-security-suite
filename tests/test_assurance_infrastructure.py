@@ -58,6 +58,13 @@ def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:
         in dockerfile
     )
     assert 'importlib.metadata.distribution("py-security-suite")' in dockerfile
+    # The image no longer ships a source tree, so every configuration must use
+    # the stable rules path the image materializes from the installed wheel.
+    assert "'/opt/pysec-suite/rules'" in dockerfile
+    for config in ("security/self-scan.toml", "containers/scanner/pysec.toml"):
+        text = (_ROOT / config).read_text(encoding="utf-8")
+        assert "/opt/pysec-suite/src" not in text, config
+        assert 'rules_path = "/opt/pysec-suite/rules/python-security.yml"' in text
     assert '"bomFormat": "CycloneDX"' in dockerfile
     assert '"specVersion": "1.6"' in dockerfile
     assert '"dependencies": dependencies' in dockerfile
