@@ -1,4 +1,23 @@
 # syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+# Python policy: the scanner image deliberately runs the oldest supported
+# runtime (3.11) so the published `requires-python` floor is exercised end to
+# end; CI covers 3.11 through 3.14 separately. See docs/compatibility-matrix.md.
+FROM python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1 AS wheel-builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# The build backend is hash-locked by the scanner project's `build` group and
+# the wheel is built without network access or build isolation.
+COPY containers/scanner/build-requirements.lock /build/build-requirements.lock
+RUN python -m pip install --require-hashes --no-deps -r /build/build-requirements.lock
+
+COPY pyproject.toml README.md LICENSE MANIFEST.in /build/source/
+COPY src /build/source/src
+RUN python -m pip wheel --no-deps --no-build-isolation --no-index \
+    --wheel-dir /build/dist /build/source
+
 FROM python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1
 
 ARG OSV_SCANNER_VERSION=2.3.8
@@ -7,15 +26,15 @@ ARG OSV_PYPI_DATABASE_SHA256
 
 LABEL org.opencontainers.image.title="Python Security Suite scanner bundle"
 LABEL org.opencontainers.image.description="Offline runtime for the Python Security Suite standard profile"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL io.pysec.bandit.version="1.9.4"
-LABEL io.pysec.semgrep.version="1.170.0"
+LABEL io.pysec.semgrep.version="1.187.0"
 LABEL io.pysec.detect-secrets.version="1.5.0"
 LABEL io.pysec.osv-scanner.version="${OSV_SCANNER_VERSION}"
 LABEL io.pysec.sbom.path="/opt/pysec-bundle/python-sbom.cdx.json"
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/opt/pysec-suite/src \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=/opt/osv-db \
@@ -26,8 +45,14 @@ COPY containers/scanner/requirements.lock /opt/pysec-suite/requirements.lock
 RUN python -m pip install --require-hashes -r /opt/pysec-suite/requirements.lock \
     && mkdir -p /opt/pysec-bundle /opt/osv-db/osv-scanner/PyPI
 
-COPY pyproject.toml README.md /opt/pysec-suite/
-COPY src /opt/pysec-suite/src
+# Runtime dependencies are already hash-locked above, so the suite itself is
+# installed from the locally built wheel without resolving anything further.
+COPY --from=wheel-builder /build/dist/ /opt/pysec-wheel/
+# The bundled Semgrep rules are exposed at a stable, layout-independent path
+# that the image and self-scan configurations reference.
+RUN python -m pip install --no-deps --no-index /opt/pysec-wheel/py_security_suite-*.whl \
+    && python -m pip check \
+    && python -c "import pathlib, shutil, py_security_suite; shutil.copytree(pathlib.Path(py_security_suite.__file__).parent / 'rules', '/opt/pysec-suite/rules')"
 COPY containers/scanner/pysec.toml /opt/pysec-suite/pysec.toml
 
 RUN python - <<'PY'
@@ -35,19 +60,18 @@ import hashlib
 import importlib.metadata
 import json
 import pathlib
-import tomllib
 import uuid
 
 from packaging.markers import default_environment
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
-project_document = tomllib.loads(
-    pathlib.Path("/opt/pysec-suite/pyproject.toml").read_text(encoding="utf-8")
-)
-project = project_document["project"]
-root_name = canonicalize_name(project["name"])
-root_version = project["version"]
+root_distribution = importlib.metadata.distribution("py-security-suite")
+root_display_name = root_distribution.metadata["Name"]
+root_name = canonicalize_name(root_display_name)
+root_version = root_distribution.version
+if not root_version:
+    raise SystemExit("package version authority is unavailable")
 root_ref = f"pkg:pypi/{root_name}@{root_version}"
 distributions = sorted(
     (
@@ -111,7 +135,7 @@ for distribution in distributions:
         {"ref": references[canonicalize_name(name)], "dependsOn": sorted(depends_on)}
     )
 root_dependencies = set()
-for raw_requirement in project.get("dependencies", ()):
+for raw_requirement in root_distribution.requires or ():
     requirement = Requirement(raw_requirement)
     if requirement.marker and not requirement.marker.evaluate(marker_environment):
         continue
@@ -135,7 +159,7 @@ document = {
         "component": {
             "type": "application",
             "bom-ref": root_ref,
-            "name": project["name"],
+            "name": root_display_name,
             "version": root_version,
             "purl": root_ref,
         },
@@ -189,6 +213,7 @@ target = pathlib.Path("/opt/osv-db/osv-scanner/PyPI/all.zip")
 digest = hashlib.sha256(target.read_bytes()).hexdigest()
 if len(expected) != 64 or digest != expected:
     raise SystemExit(f"PyPI OSV database checksum mismatch: {digest} != {expected}")
+target.chmod(0o444)
 pathlib.Path("/opt/pysec-bundle/osv-pypi-database.sha256").write_text(
     f"{digest}  /opt/osv-db/osv-scanner/PyPI/all.zip\n",
     encoding="utf-8",
@@ -197,6 +222,14 @@ PY
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN python -m pip freeze --all | sort > /opt/pysec-bundle/python-packages.txt
+
+# Runtime callers deliberately use their host UID so bind-mounted evidence is
+# not left owned by root. BuildKit does not guarantee a portable source mode
+# for named-context copies, so every governed runtime asset must be explicitly
+# traversable and readable by an otherwise unknown UID.
+RUN chmod 0555 /opt /opt/osv-db /opt/osv-db/osv-scanner /opt/osv-db/osv-scanner/PyPI \
+    /opt/pysec-bundle \
+    && chmod 0444 /opt/osv-db/osv-scanner/PyPI/all.zip /opt/pysec-bundle/*
 
 RUN bandit --version \
     && semgrep --version \

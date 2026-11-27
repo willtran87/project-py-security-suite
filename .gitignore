@@ -21,3 +21,7 @@ python-security-report/
 .pysec-tools/
 .docx-qa/
 /~/
+.tox/
+htmlcov/
+mutants/
+.tmp-*/

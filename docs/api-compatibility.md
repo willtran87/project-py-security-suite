@@ -1,7 +1,5 @@
 # API and compatibility policy
 
-Last reviewed: 2026-08-30
-
 The command line, console-script targets, explicitly exported package names,
 entry-point callable signatures, and exported JSON schemas are the supported
 integration surface. Other Python modules remain internal unless explicitly

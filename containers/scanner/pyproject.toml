@@ -1,13 +1,19 @@
 [project]
 name = "py-security-suite-scanner-environment"
 version = "0.1.0"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "bandit==1.9.4",
   "detect-secrets==1.5.0",
+  "run-codeql==1.6.0",
   "py-security-suite",
-  "semgrep==1.170.0",
+  "semgrep==1.187.0",
 ]
+
+[dependency-groups]
+# Hash-locked PEP 517 backend for the image's wheel-builder stage. It must match
+# the root pyproject.toml build-system pin (enforced by the test suite).
+build = ["setuptools==84.2.1"]
 
 [tool.uv]
 package = false
