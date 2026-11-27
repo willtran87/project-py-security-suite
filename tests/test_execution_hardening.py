@@ -156,10 +156,80 @@ def test_batch_file_scanners_are_rejected(tmp_path: Path) -> None:
         assert "batch-file" in (windows_image_error(batch) or "")
         assert "not a native PE image" in (windows_image_error(script) or "")
         assert windows_image_error(native) is None
-        with pytest.raises(ValueError, match="batch-file"):
-            require_windows_image(str(batch))
     with patch("py_security_suite.executable_pin.os.name", "posix"):
         assert windows_image_error(batch) is None
+        require_windows_image(str(batch))  # not a Windows host: no-op
+    if sys.platform == "win32":
+        # Path() picks the host flavour, so exercise the real call only there.
+        with pytest.raises(ValueError, match="batch-file"):
+            require_windows_image(str(batch))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symbolic-link semantics")
+def test_symlinked_executable_is_pinned_by_its_resolved_target(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "real-python"
+    target.write_bytes(b"#!/bin/sh\nexit 0\n")
+    link = tmp_path / "bin" / "python"
+    link.parent.mkdir()
+    link.symlink_to(target)
+    with pin_executable(link) as pinned:
+        assert pinned.path == target.resolve()
+        assert pinned.sha256 == sha256_file(target)
+        assert pinned.unchanged()
+        # Retargeting the requested link is detected as a swap.
+        other = tmp_path / "other-python"
+        other.write_bytes(b"#!/bin/sh\nexit 1\n")
+        link.unlink()
+        link.symlink_to(other)
+        assert not pinned.unchanged()
+
+    # The adapter base pins the resolved path recorded at preflight.
+    link.unlink()
+    link.symlink_to(target)
+    adapter = LenientAdapter(ToolConfig(executable=str(link)), 4096)
+    readiness = adapter.preflight(tmp_path)
+    assert readiness.status == "ready", readiness.reason
+    assert readiness.executable == str(target.resolve())
+    with (
+        patch.object(adapter, "_detect_version", return_value="test"),
+        patch(
+            "py_security_suite.adapters.base.run_command",
+            return_value=RawExecution([str(link)], 0, "", "", 0.1),
+        ),
+    ):
+        outcome = adapter._run_ready(tmp_path, str(link))
+    assert outcome.tool_run.status is ToolStatus.COMPLETED
+
+
+def test_bounded_subprocess_timeout_stays_primary_over_cleanup_failure() -> None:
+    import threading
+
+    from py_security_suite import bounded_subprocess
+
+    class StuckThread(threading.Thread):
+        def is_alive(self) -> bool:
+            return True
+
+    with (
+        patch.object(bounded_subprocess.threading, "Thread", StuckThread),
+        pytest.raises(bounded_subprocess.BoundedSubprocessError) as raised,
+    ):
+        bounded_subprocess.run_bounded_subprocess(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            timeout_seconds=0.2,
+            maximum_stdout_bytes=1024,
+            maximum_stderr_bytes=1024,
+            environment={
+                key: value
+                for key, value in os.environ.items()
+                if key.upper() in {"SYSTEMROOT", "PATH"}
+            },
+        )
+    message = str(raised.value)
+    assert message.startswith("bounded subprocess timed out")
+    assert "pipe cleanup did not complete" in message
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows batch launch semantics")

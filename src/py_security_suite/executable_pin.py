@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -59,19 +60,33 @@ def require_windows_image(executable: str) -> None:
 
 @dataclass(slots=True)
 class PinnedExecutable:
+    """A held executable; ``path`` is the resolved regular file actually hashed."""
+
     path: Path
     sha256: str
     _descriptor: int
     _identity: tuple[int, int, int, int, int]
+    requested: Path | None = None
 
     def unchanged(self) -> bool:
-        """Return whether the pinned path still names the hashed, unmodified file."""
+        """Return whether the pinned paths still name the hashed, unmodified file.
+
+        Both the resolved target and the originally requested path (which may
+        be a symbolic link, e.g. a virtual-environment ``python``) must still
+        lead to the held inode, so a retargeted link is detected too.
+        """
         try:
             held = os.fstat(self._descriptor)
             current = os.stat(self.path)
+            requested = os.stat(self.requested) if self.requested else current
         except OSError:
             return False
-        return _identity(held) == self._identity == _identity(current)
+        return (
+            _identity(held)
+            == self._identity
+            == _identity(current)
+            == _identity(requested)
+        )
 
 
 def _identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
@@ -83,9 +98,18 @@ def _identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
 
 @contextmanager
 def pin_executable(path: Path) -> Iterator[PinnedExecutable]:
-    """Open, hash and hold an executable until the caller's launch completes."""
-    descriptor = _open_shared_read_only(path)
+    """Open, hash and hold an executable until the caller's launch completes.
+
+    Symbolic links (virtual-environment interpreters, ``/usr/bin``
+    alternatives, Homebrew shims) are resolved first; the final regular file
+    is then opened without following links and is what gets hashed.
+    """
+    requested = Path(os.path.abspath(path))
+    resolved = path.resolve(strict=True)
+    descriptor = _open_shared_read_only(resolved)
     try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError("scanner executable is not a regular file")
         digest = hashlib.sha256()
         header = b""
         os.lseek(descriptor, 0, os.SEEK_SET)
@@ -93,11 +117,18 @@ def pin_executable(path: Path) -> Iterator[PinnedExecutable]:
             if not header:
                 header = chunk[:2]
             digest.update(chunk)
-        error = windows_image_error(path, header)
+        error = windows_image_error(resolved, header)
         if error:
             raise ValueError(error)
+        identity = _identity(os.fstat(descriptor))
+        if _identity(os.stat(resolved)) != identity:
+            raise ValueError("scanner executable changed while it was pinned")
         yield PinnedExecutable(
-            path, digest.hexdigest(), descriptor, _identity(os.fstat(descriptor))
+            resolved,
+            digest.hexdigest(),
+            descriptor,
+            identity,
+            requested if requested != resolved else None,
         )
     finally:
         os.close(descriptor)
@@ -148,7 +179,10 @@ def _open_windows_deny_write(path: Path) -> int:  # pragma: no cover - Windows o
         error = ctypes.get_last_error()  # type: ignore[attr-defined]
         raise OSError(error, "scanner executable could not be pinned", str(path))
     try:
-        return msvcrt.open_osfhandle(handle, os.O_RDONLY | getattr(os, "O_BINARY", 0))  # type: ignore[attr-defined]
+        descriptor: int = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
+            handle, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        )
+        return descriptor
     except OSError:
         kernel32.CloseHandle(handle)
         raise

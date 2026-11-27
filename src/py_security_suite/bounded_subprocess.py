@@ -218,7 +218,10 @@ def run_bounded_subprocess(
         for reader in started_workers:
             reader.join(timeout=2.0)
         if any(reader.is_alive() for reader in started_workers):
-            violation = "bounded subprocess pipe cleanup did not complete"
+            # The first violation (timeout, overflow, stop) stays primary; a
+            # later cleanup failure is appended as context, never a replacement.
+            cleanup = "bounded subprocess pipe cleanup did not complete"
+            violation = f"{violation}; {cleanup}" if violation else cleanup
         else:
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is not None and not stream.closed:
