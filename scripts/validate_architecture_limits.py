@@ -13,12 +13,14 @@ _MAXIMUM_UNTRACKED_FUNCTION_DECISIONS = 65
 # function decision budgets and the untracked-code limits are unchanged.
 _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_assurance.py": 5_420,
-    "src/py_security_suite/industry_standards_catalog.py": 6_256,
-    "src/py_security_suite/industry_benchmark_catalog.py": 2_409,
-    "src/py_security_suite/industry_profile_catalog.py": 6_896,
-    "src/py_security_suite/industry_interoperability_sector_catalog.py": 413,
-    "src/py_security_suite/industry_maturity_product_catalog.py": 630,
-    "src/py_security_suite/industry_emerging_assurance_catalog.py": 1_188,
+    # Catalog data now lives in validated package JSON (catalogs/*.json); the
+    # modules only bind names, so these budgets keep data from creeping back.
+    "src/py_security_suite/industry_standards_catalog.py": 24,
+    "src/py_security_suite/industry_benchmark_catalog.py": 33,
+    "src/py_security_suite/industry_profile_catalog.py": 24,
+    "src/py_security_suite/industry_interoperability_sector_catalog.py": 34,
+    "src/py_security_suite/industry_maturity_product_catalog.py": 32,
+    "src/py_security_suite/industry_emerging_assurance_catalog.py": 37,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
     "src/py_security_suite/risk_paths.py": 7_265,
     "src/py_security_suite/reports.py": 7_498,

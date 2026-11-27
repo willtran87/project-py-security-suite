@@ -117,6 +117,7 @@ py_security_suite = [
   "rules/codeql/*.qll",
   "rules/codeql/*.yml",
   "schemas/*.json",
+  "catalogs/*.json",
 ]
 
 [tool.check-manifest]
@@ -194,6 +195,7 @@ include = [
   "src/py_security_suite/standards_monitor.py",
   "src/py_security_suite/source_assurance.py",
   "src/py_security_suite/strict_json.py",
+  "src/py_security_suite/catalog_data.py",
   "scripts/audit_github_assurance_controls.py",
   "scripts/extract_github_artifact.py",
   "scripts/generate_architecture_assurance.py",

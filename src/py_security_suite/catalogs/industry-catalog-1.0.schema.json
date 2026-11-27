@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "py-security-suite/industry-catalog/1.0",
+  "title": "Built-in industry catalog data",
+  "description": "Ordered operations that rebuild the module-level data names of one py_security_suite industry catalog module. Container positions use one {} per mapping level and one [] per sequence level below the name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog", "containers", "operations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "catalog": {"type": "string", "pattern": "^industry_[a-z_]+_catalog$"},
+    "containers": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "propertyNames": {"pattern": "^(\\{\\}|\\[\\])*$"},
+        "additionalProperties": {"enum": ["tuple", "set", "frozenset"]}
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/operation"}
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^_?[A-Z][A-Z0-9_]*$"},
+    "value": {
+      "description": "Catalog data. Nested members are restricted to objects, arrays, strings and booleans by the loader while it rebuilds the value.",
+      "type": ["string", "boolean", "array", "object"]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target"],
+      "properties": {
+        "op": {"enum": ["assign", "extend", "update", "append"]},
+        "target": {"$ref": "#/$defs/name"},
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "value": {"$ref": "#/$defs/value"}
+      },
+      "oneOf": [
+        {"required": ["value"], "not": {"required": ["references"]}},
+        {"required": ["references"], "not": {"required": ["value"]}}
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"op": {"const": "assign"}}},
+          "then": {"required": ["value"], "not": {"required": ["path"]}}
+        },
+        {
+          "if": {"properties": {"op": {"const": "update"}}},
+          "then": {"not": {"required": ["path"]}}
+        },
+        {
+          "if": {"properties": {"op": {"const": "append"}}},
+          "then": {"required": ["value", "path"]}
+        }
+      ]
+    }
+  }
+}
