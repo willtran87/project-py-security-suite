@@ -372,3 +372,49 @@ def test_governance_quorum_rejects_organization_lifecycle_and_independence_gaps(
                 purpose="test",
                 trust_environment=candidate,
             )
+
+
+def test_governance_quorum_rejects_revoked_key_with_backdated_signed_at(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(UTC)
+    subject = {"policy": "production"}
+    # The signer asserts signed_at = now - 1 minute; the key was revoked 30
+    # seconds ago. A holder of the revoked key controls signed_at, so the
+    # signature must be rejected once verification happens after revocation.
+    authority = _authority(
+        tmp_path, name="revoked", subject=subject, purpose="test", now=now
+    )[0]
+    signer = str(authority["signer_id"])
+    environment = {
+        **_environment([authority], purpose="test", now=now),
+        "PYSEC_AUTHORITY_KEY_LIFECYCLE": strict_dumps(
+            {
+                signer: {
+                    "not_before": (now - timedelta(days=1)).isoformat(),
+                    "not_after": (now + timedelta(days=1)).isoformat(),
+                    "revoked_at": (now - timedelta(seconds=30)).isoformat(),
+                }
+            }
+        ),
+    }
+    with pytest.raises(ValueError, match="outside its lifecycle"):
+        verify_governance_quorum(
+            tmp_path / "policy.json",
+            [authority],
+            subject,
+            1,
+            now,
+            purpose="test",
+            trust_environment=environment,
+        )
+    # Verification at a trusted time before revocation remains valid.
+    verify_governance_quorum(
+        tmp_path / "policy.json",
+        [authority],
+        subject,
+        1,
+        now - timedelta(seconds=45),
+        purpose="test",
+        trust_environment=environment,
+    )

@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 from .report_markdown import _markdown_text, _markdown_code
+from .report_sarif import (
+    SARIF_FINGERPRINT_KEY,
+    _sarif_artifact_uri,
+    _sarif_code_flow_summary,
+    _sarif_level,
+    _sarif_message_text,
+    _sarif_name,
+    _sarif_security_score,
+    _sarif_suppression,
+)
 from .risk_path_report_intro import render_risk_path_intro
 
 import hashlib
@@ -312,7 +322,9 @@ def _write_primary_report_files(
             advanced_analysis=advanced if isinstance(advanced, dict) else None,
         ),
     )
-    _write_json(output / "results.sarif", render_sarif(active_findings))
+    # Accepted findings stay in SARIF with a suppression so platforms keep
+    # them dismissed instead of auto-closing them as fixed.
+    _write_json(output / "results.sarif", render_sarif(findings))
     _write_json(
         output / "sonarqube-external-issues.json",
         render_sonarqube_external_issues(active_findings),
@@ -4503,28 +4515,46 @@ Use <code>checksums.sha256</code> to verify the downloadable artifact.</p>
 
 
 def render_sarif(findings: list[Finding]) -> dict[str, Any]:
+    """Render SARIF 2.1.0 for code-scanning platforms.
+
+    Rules are keyed by ``(scanner rule, severity)`` because GitHub reads
+    ``security-severity`` only from the rule descriptor: one descriptor per
+    source rule would show every result at the first finding's severity.
+    Findings suppressed by governed risk acceptance are emitted with an
+    accepted external suppression instead of being dropped, so platforms keep
+    them dismissed rather than closing them as fixed.
+    """
+
     rules: dict[str, dict[str, Any]] = {}
     results: list[dict[str, Any]] = []
     for finding in findings:
         source = finding.sources[0] if finding.sources else None
-        rule_id = f"{source.tool}/{source.rule_id}" if source else finding.finding_id
+        base_rule_id = (
+            f"{source.tool}/{source.rule_id}" if source else finding.finding_id
+        )
+        rule_id = f"{base_rule_id}/{finding.severity.value}"
+        security_severity = str(_sarif_security_score(finding.severity))
         rule = {
             "id": rule_id,
             "name": _sarif_name(rule_id),
             "shortDescription": {"text": finding.title},
             "fullDescription": {"text": finding.description},
+            "defaultConfiguration": {"level": _sarif_level(finding.severity)},
             "help": {
                 "text": (
                     f"Why it matters: {finding.impact}\n\n"
                     f"Recommended action: {finding.remediation}"
                 ),
                 "markdown": (
-                    f"**Why it matters:** {finding.impact}\n\n"
-                    f"**Recommended action:** {finding.remediation}"
+                    f"**Why it matters:** {_markdown_text(finding.impact)}\n\n"
+                    "**Recommended action:** "
+                    f"{_markdown_text(finding.remediation)}"
                 ),
             },
             "properties": {
-                "security-severity": str(_sarif_security_score(finding.severity)),
+                "security-severity": security_severity,
+                "severity": finding.severity.value,
+                "source_rule_id": base_rule_id,
                 "tags": list(
                     dict.fromkeys(
                         [finding.domain, finding.area, *finding.classifications]
@@ -4539,9 +4569,11 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         result: dict[str, Any] = {
             "ruleId": rule_id,
             "level": _sarif_level(finding.severity),
-            "message": {"text": finding.description},
-            "partialFingerprints": {"primaryLocationLineHash": finding.fingerprint},
+            "message": {"text": _sarif_message_text(finding.description)},
+            "partialFingerprints": {SARIF_FINGERPRINT_KEY: finding.fingerprint},
             "properties": {
+                "security-severity": security_severity,
+                "severity": finding.severity.value,
                 "finding_id": finding.finding_id,
                 "priority": _finding_priority(finding),
                 "domain": finding.domain,
@@ -4620,10 +4652,16 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             flow_summary = _sarif_code_flow_summary(code_flows)
             if flow_summary:
                 result["properties"]["sarif_code_flow_summary"] = flow_summary
-        if finding.locations:
-            result["locations"] = [
-                _sarif_result_location(location) for location in finding.locations
-            ]
+        suppression = _sarif_suppression(finding)
+        if suppression is not None:
+            result["suppressions"] = [suppression]
+        locations = [
+            physical
+            for physical in map(_sarif_result_location, finding.locations)
+            if physical is not None
+        ]
+        if locations:
+            result["locations"] = locations
         results.append(result)
     return {
         "$schema": ("https://json.schemastore.org/sarif-2.1.0.json"),
@@ -4642,82 +4680,11 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
     }
 
 
-def _sarif_code_flow_summary(value: list[Any]) -> list[dict[str, Any]]:
-    allowed_semantics = {
-        "native-source-sink-kinds",
-        "security-path-problem",
-        "unclassified-code-flow",
-    }
-    summaries: list[dict[str, Any]] = []
-    for flow_index, flow in enumerate(value[:10]):
-        if not isinstance(flow, dict):
-            continue
-        raw_semantic_basis = flow.get("semantic_basis")
-        semantic_basis = (
-            raw_semantic_basis
-            if isinstance(raw_semantic_basis, str)
-            and raw_semantic_basis in allowed_semantics
-            else "unclassified-code-flow"
-        )
-        raw_counts = flow.get("thread_flow_location_resolution_counts")
-        counts: dict[object, object] = (
-            raw_counts if isinstance(raw_counts, dict) else {}
-        )
-        count_items: list[tuple[str, object]] = [
-            (key, count) for key, count in counts.items() if isinstance(key, str)
-        ]
-        bounded_counts = sorted(
-            count_items,
-            key=lambda item: item[0],
-        )[:20]
-        summaries.append(
-            {
-                "flow_index": flow_index,
-                "code_flow_index": _sarif_summary_count(flow.get("code_flow_index")),
-                "code_flow_thread_count": _sarif_summary_count(
-                    flow.get("code_flow_thread_count")
-                ),
-                "represented_thread_count": _sarif_summary_count(
-                    flow.get("represented_thread_count")
-                ),
-                "thread_flows_omitted": _sarif_summary_count(
-                    flow.get("thread_flows_omitted")
-                ),
-                "cross_thread_combined": flow.get("cross_thread_combined") is True,
-                "execution_order_complete": (
-                    flow.get("execution_order_complete") is True
-                ),
-                "invalid_execution_order_count": _sarif_summary_count(
-                    flow.get("invalid_execution_order_count")
-                ),
-                "duplicate_execution_order_count": _sarif_summary_count(
-                    flow.get("duplicate_execution_order_count")
-                ),
-                "simultaneous_execution_order_count": _sarif_summary_count(
-                    flow.get("simultaneous_execution_order_count")
-                ),
-                "semantic_basis": semantic_basis,
-                "reported_step_count": _sarif_summary_count(flow.get("step_count")),
-                "steps_omitted": _sarif_summary_count(flow.get("steps_omitted")),
-                "thread_flow_location_resolution_counts": {
-                    key[:100]: _sarif_summary_count(count)
-                    for key, count in bounded_counts
-                },
-            }
-        )
-    return summaries
-
-
-def _sarif_summary_count(value: Any) -> int:
-    return (
-        value
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
-        else 0
-    )
-
-
-def _sarif_result_location(location: Location) -> dict[str, Any]:
-    physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
+def _sarif_result_location(location: Location) -> dict[str, Any] | None:
+    uri = _sarif_artifact_uri(location.path)
+    if uri is None:
+        return None
+    physical: dict[str, Any] = {"artifactLocation": {"uri": uri}}
     if location.start_line:
         region: dict[str, Any] = {
             "startLine": location.start_line,
@@ -7323,33 +7290,10 @@ def _external_assurance_row(
     return control, status, evidence, action, reference
 
 
-def _sarif_name(rule_id: str) -> str:
-    return "".join(character if character.isalnum() else "_" for character in rule_id)[
-        :120
-    ]
-
-
-def _sarif_level(severity: Severity) -> str:
-    if severity in {Severity.CRITICAL, Severity.HIGH}:
-        return "error"
-    if severity is Severity.MEDIUM:
-        return "warning"
-    return "note"
-
-
-def _sarif_security_score(severity: Severity) -> float:
-    return {
-        Severity.CRITICAL: 9.5,
-        Severity.HIGH: 8.0,
-        Severity.MEDIUM: 5.5,
-        Severity.LOW: 3.0,
-        Severity.INFORMATIONAL: 1.0,
-        Severity.UNKNOWN: 0.0,
-    }[severity]
-
-
 def _markdown_table(value: str) -> str:
-    return _markdown_text(value).replace("|", "\\|")
+    # ``_markdown_text`` already escapes ``|``; escaping again would emit
+    # ``\\|``, which GFM reads as a literal backslash followed by a cell break.
+    return _markdown_text(value)
 
 
 def _render_risk_routes_table(routes: list[dict[str, Any]]) -> list[str]:

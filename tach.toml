@@ -18,6 +18,10 @@ path = "py_security_suite.report_markdown"
 depends_on = []
 
 [[modules]]
+path = "py_security_suite.report_sarif"
+depends_on = ["py_security_suite.models"]
+
+[[modules]]
 path = "py_security_suite.risk_path_report_intro"
 depends_on = []
 
@@ -539,7 +543,7 @@ depends_on = ["py_security_suite.trusted_observation", "py_security_suite.truste
 
 [[modules]]
 path = "py_security_suite.reports"
-depends_on = ["py_security_suite.artifact_validation", "py_security_suite.portfolio_health", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.admission", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_references", "py_security_suite.report_cleanup", "py_security_suite.report_io", "py_security_suite.report_markdown", "py_security_suite.risk_path_report_intro"]
+depends_on = ["py_security_suite.artifact_validation", "py_security_suite.portfolio_health", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.admission", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_references", "py_security_suite.report_cleanup", "py_security_suite.report_io", "py_security_suite.report_markdown", "py_security_suite.report_sarif", "py_security_suite.risk_path_report_intro"]
 
 [[modules]]
 path = "py_security_suite.repository_file_policy"
