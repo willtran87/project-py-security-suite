@@ -267,6 +267,34 @@ next action is computed from actual applicability, completion, attached
 companion evidence, and active findings, so a passing coverage or deep-analysis
 lane is retained rather than incorrectly requested again.
 
+### Scanner launch boundary
+
+- A scanner that could not be launched (for example `fork` failing with
+  `EAGAIN` under the per-user `RLIMIT_NPROC` quota) or that ran without its
+  OS containment is recorded as a launch or containment failure with no exit
+  status; the tool run fails instead of being parsed as a clean result.
+- Windows scanners must be native PE images. `.bat`/`.cmd` shims are rejected
+  and `PATHEXT` excludes them, because `cmd.exe` re-parses arguments that can
+  contain repository-controlled filenames. Scanners still run with the target
+  as their working directory (Tach, Ruff, Gitleaks and others discover project
+  configuration there), with absolute executables and
+  `NoDefaultCurrentDirectoryInExePath=1` so helper lookups never search it.
+- The approved executable is held open from digest verification through
+  process exit: on Windows without write/delete sharing (it cannot be modified,
+  replaced or renamed), on POSIX by inode/ctime identity that fails the run if
+  the file is replaced or rewritten. Residual risk: on POSIX an in-place write
+  that is reverted before the post-run check within the filesystem's ctime
+  granularity is not prevented, and native libraries other than the executable
+  are only re-hashed after the run; keep scanner installs read-only to the
+  scanning identity.
+- Python runtime closures fail when a site directory contains a `*.pth`,
+  `sitecustomize`/`usercustomize`, module or package that no installed
+  distribution owns, and every remaining startup file is hashed.
+- On Linux the launch bootstrap is a child subreaper and kills descendants that
+  `setsid`/double-fork after the scanner exits. Elsewhere POSIX cleanup relies
+  on the process group plus a descendant snapshot taken before termination; a
+  descendant that leaves both before termination can outlive the scan there.
+
 ## Implemented additions and companion controls
 
 The following offline controls are now implemented:

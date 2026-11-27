@@ -15,17 +15,24 @@ from collections.abc import Mapping, Sequence
 
 import psutil
 
+from .executable_pin import require_windows_image
 from .scan_control import stop_reason
 from .process_containment import apply_windows_job_limits, close_windows_handle
+from .scanner_launch import wait_quietly
 
 # The trusted launcher cannot start caller code until the supervisor assigns its
 # Job Object and writes the gate byte. Read exactly one byte without buffering
 # so the eventual command receives the original stdin payload unchanged.
 _WINDOWS_GATE = (
-    "import os,subprocess,sys; "
-    "gate=os.read(0,1); "
-    "sys.exit(subprocess.call(sys.argv[1:]) if gate == b'\\x00' else 125)"
+    "import os,subprocess,sys\n"
+    "gate=os.read(0,1)\n"
+    "if gate != b'\\x00': sys.exit(125)\n"
+    "try: child=subprocess.Popen(sys.argv[1:])\n"
+    "except BaseException: os._exit(126)\n"
+    "sys.exit(child.wait())"
 )
+# Reserved by the Windows gate: the command could not be launched at all.
+LAUNCH_FAILURE_EXIT_CODE = 126
 
 
 class BoundedSubprocessError(ValueError):
@@ -85,6 +92,13 @@ def run_bounded_subprocess(
         raise BoundedSubprocessError(stop_reason())
     deadline = time.monotonic() + timeout_seconds
     try:
+        require_windows_image(argv[0])
+    except ValueError as exc:
+        raise BoundedSubprocessError(str(exc)) from exc
+    process_environment = dict(environment)
+    if os.name == "nt":
+        process_environment["NoDefaultCurrentDirectoryInExePath"] = "1"
+    try:
         process = subprocess.Popen(  # noqa: S603 - caller validates executable trust
             [sys.executable, "-I", "-c", _WINDOWS_GATE, *argv]
             if os.name == "nt"
@@ -93,7 +107,7 @@ def run_bounded_subprocess(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             shell=False,
-            env=dict(environment),
+            env=process_environment,
             start_new_session=os.name != "nt",
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
             if os.name == "nt"
@@ -109,7 +123,7 @@ def run_bounded_subprocess(
             )
     except BaseException:
         _kill_process_tree(process)
-        process.wait(timeout=5)
+        wait_quietly(process, 5)  # never mask the containment failure
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None:
                 stream.close()
@@ -199,11 +213,15 @@ def run_bounded_subprocess(
             time.sleep(0.01)
     finally:
         terminate()
-        process.wait(timeout=5)
+        if not wait_quietly(process, 5) and violation is None:
+            violation = "bounded subprocess did not exit after termination"
         for reader in started_workers:
             reader.join(timeout=2.0)
         if any(reader.is_alive() for reader in started_workers):
-            violation = "bounded subprocess pipe cleanup did not complete"
+            # The first violation (timeout, overflow, stop) stays primary; a
+            # later cleanup failure is appended as context, never a replacement.
+            cleanup = "bounded subprocess pipe cleanup did not complete"
+            violation = f"{violation}; {cleanup}" if violation else cleanup
         else:
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is not None and not stream.closed:

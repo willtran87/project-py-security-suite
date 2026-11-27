@@ -183,7 +183,7 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.operation_rece
 
 [[modules]]
 path = "py_security_suite.bounded_subprocess"
-depends_on = ["py_security_suite.scan_control", "py_security_suite.process_containment"]
+depends_on = ["py_security_suite.scan_control", "py_security_suite.process_containment", "py_security_suite.executable_pin", "py_security_suite.scanner_launch"]
 
 [[modules]]
 path = "py_security_suite.bytecode_analysis"
@@ -307,7 +307,7 @@ depends_on = ["py_security_suite.finding_register", "py_security_suite.github_an
 
 [[modules]]
 path = "py_security_suite.execution"
-depends_on = ["py_security_suite.trusted_observation", "py_security_suite.path_safety", "py_security_suite.strict_json", "py_security_suite.execution_policy", "py_security_suite.diagnostic_safety", "py_security_suite.governance_quorum", "py_security_suite.scan_control", "py_security_suite.process_memory", "py_security_suite.process_containment", "py_security_suite.command_environment", "py_security_suite.governed_assets", "py_security_suite.platform_runtime"]
+depends_on = ["py_security_suite.trusted_observation", "py_security_suite.path_safety", "py_security_suite.strict_json", "py_security_suite.execution_policy", "py_security_suite.diagnostic_safety", "py_security_suite.governance_quorum", "py_security_suite.scan_control", "py_security_suite.process_memory", "py_security_suite.process_containment", "py_security_suite.command_environment", "py_security_suite.governed_assets", "py_security_suite.platform_runtime", "py_security_suite.executable_pin", "py_security_suite.runtime_site_audit", "py_security_suite.scanner_launch"]
 
 [[modules]]
 path = "py_security_suite.execution_policy"
@@ -471,7 +471,7 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.benchmark_scor
 
 [[modules]]
 path = "py_security_suite.pinned_command"
-depends_on = ["py_security_suite.operation_receipt", "py_security_suite.attestation_formats", "py_security_suite.path_safety", "py_security_suite.execution", "py_security_suite.strict_json", "py_security_suite.failure_domain"]
+depends_on = ["py_security_suite.operation_receipt", "py_security_suite.attestation_formats", "py_security_suite.path_safety", "py_security_suite.execution", "py_security_suite.strict_json", "py_security_suite.failure_domain", "py_security_suite.executable_pin"]
 
 [[modules]]
 path = "py_security_suite.policy"
@@ -543,7 +543,7 @@ depends_on = ["py_security_suite.trusted_observation", "py_security_suite.truste
 
 [[modules]]
 path = "py_security_suite.reports"
-depends_on = ["py_security_suite.artifact_validation", "py_security_suite.portfolio_health", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.admission", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_references", "py_security_suite.report_cleanup", "py_security_suite.report_io", "py_security_suite.report_markdown", "py_security_suite.report_sarif", "py_security_suite.risk_path_report_intro"]
+depends_on = ["py_security_suite.artifact_validation", "py_security_suite.portfolio_health", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.admission", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_references", "py_security_suite.report_cleanup", "py_security_suite.report_acl", "py_security_suite.report_io", "py_security_suite.report_markdown", "py_security_suite.risk_path_report_intro", "py_security_suite.report_sarif"]
 
 [[modules]]
 path = "py_security_suite.repository_file_policy"
@@ -659,7 +659,7 @@ depends_on = []
 
 [[modules]]
 path = "py_security_suite.adapters"
-depends_on = ["py_security_suite.path_safety", "py_security_suite.execution", "py_security_suite.config", "py_security_suite.strict_json", "py_security_suite.surface_proof", "py_security_suite.trusted_observation", "py_security_suite.models", "py_security_suite.repository_file_policy", "py_security_suite.source_context", "py_security_suite.native_evidence", "py_security_suite.repository_surfaces", "py_security_suite.scan_control", "py_security_suite.source_index"]
+depends_on = ["py_security_suite.path_safety", "py_security_suite.execution", "py_security_suite.config", "py_security_suite.strict_json", "py_security_suite.surface_proof", "py_security_suite.trusted_observation", "py_security_suite.models", "py_security_suite.repository_file_policy", "py_security_suite.source_context", "py_security_suite.native_evidence", "py_security_suite.repository_surfaces", "py_security_suite.scan_control", "py_security_suite.source_index", "py_security_suite.executable_pin", "py_security_suite.command_environment"]
 
 [[modules]]
 path = "py_security_suite.config_numbers"
@@ -731,11 +731,27 @@ depends_on = []
 
 [[modules]]
 path = "py_security_suite.report_io"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
 
 [[modules]]
 path = "py_security_suite.command_environment"
 depends_on = ["py_security_suite.path_safety"]
+
+[[modules]]
+path = "py_security_suite.report_acl"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.executable_pin"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.runtime_site_audit"
+depends_on = ["py_security_suite.path_safety"]
+
+[[modules]]
+path = "py_security_suite.scanner_launch"
+depends_on = ["py_security_suite.path_safety", "py_security_suite.strict_json"]
 
 [[modules]]
 path = "py_security_suite.governed_assets"
