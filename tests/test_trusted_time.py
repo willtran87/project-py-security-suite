@@ -15,6 +15,7 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from py_security_suite.trusted_time import (
     _TRUSTED_TIME_STATE_GENESIS_SHA256,
     _advance_time_state,
+    _authority_policy,
     _bounded_bytes,
     _certificates,
     _deployment_values,
@@ -30,6 +31,7 @@ from py_security_suite.trusted_time import (
     _verify_deployment_policy,
     _verify_legacy_policy,
     _verify_revocation,
+    _verify_timestamping_eku,
     verify_rfc3161,
 )
 
@@ -88,7 +90,9 @@ def test_trusted_time_quorum_requires_independence_agreement_and_state(
     observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
     values = [{"authority": "tsa-a"}, {"authority": "tsa-b"}]
 
-    def receipt(index: int, *, offset: int = 0) -> dict[str, str]:
+    def receipt(
+        index: int, *, offset: int = 0
+    ) -> tuple[dict[str, str], dict[str, str]]:
         return {
             "trusted_time_sha256": str(index) * 64,
             "trusted_time_observed_at": (
@@ -96,10 +100,10 @@ def test_trusted_time_quorum_requires_independence_agreement_and_state(
             ).isoformat(),
             "trusted_time_receipt_sha256": chr(97 + index) * 64,
             "trusted_time_signer_sha256": chr(99 + index) * 64,
-        }
+        }, _identity(index)
 
     with patch(
-        "py_security_suite.trusted_time._verify_single_rfc3161",
+        "py_security_suite.trusted_time._verify_rfc3161_receipt",
         side_effect=[receipt(1), receipt(2)],
     ):
         with pytest.raises(ValueError, match="persistent monotonic state"):
@@ -112,7 +116,7 @@ def test_trusted_time_quorum_requires_independence_agreement_and_state(
     )
     with (
         patch(
-            "py_security_suite.trusted_time._verify_single_rfc3161",
+            "py_security_suite.trusted_time._verify_rfc3161_receipt",
             side_effect=[receipt(1), receipt(2)],
         ),
         patch(
@@ -126,7 +130,7 @@ def test_trusted_time_quorum_requires_independence_agreement_and_state(
     assert len(result["trusted_time_sha256"]) == 64
 
     with patch(
-        "py_security_suite.trusted_time._verify_single_rfc3161",
+        "py_security_suite.trusted_time._verify_rfc3161_receipt",
         side_effect=[receipt(1), receipt(2, offset=6)],
     ):
         with pytest.raises(ValueError, match="timestamps disagree"):
@@ -148,8 +152,8 @@ def test_trusted_time_quorum_rejects_duplicate_authorities_and_signers() -> None
         "trusted_time_signer_sha256": "3" * 64,
     }
     with patch(
-        "py_security_suite.trusted_time._verify_single_rfc3161",
-        side_effect=[result, result],
+        "py_security_suite.trusted_time._verify_rfc3161_receipt",
+        side_effect=[(result, _identity(1)), (result, _identity(1))],
     ):
         with pytest.raises(ValueError, match="must be independent"):
             verify_rfc3161(
@@ -325,7 +329,7 @@ def test_trusted_time_pkix_chain_and_revocation_are_cryptographically_verified()
         .add_revoked_certificate(revoked)
         .sign(root_key, hashes.SHA256())
     )
-    with pytest.raises(ValueError, match="revoked at issuance"):
+    with pytest.raises(ValueError, match="key was compromised"):
         _verify_revocation(
             [leaf],
             [root],
@@ -438,3 +442,220 @@ def _timestamp_chain(
         .sign(root_key, hashes.SHA256())
     )
     return root_key, root, leaf
+
+
+def _identity(index: int) -> dict[str, str]:
+    return {
+        "authority": f"tsa-{index}",
+        "anchor": str(index) * 64,
+        "signer_spki": chr(97 + index) * 64,
+        "signer_certificate": chr(100 + index) * 64,
+    }
+
+
+@pytest.mark.parametrize("field", ["anchor", "signer_spki", "signer_certificate"])
+def test_trusted_time_quorum_rejects_shared_cryptographic_identity(
+    field: str,
+) -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC).isoformat()
+
+    def receipt(index: int) -> tuple[dict[str, str], dict[str, str]]:
+        identity = _identity(index)
+        identity[field] = _identity(1)[field]
+        return {
+            "trusted_time_sha256": str(index) * 64,
+            "trusted_time_observed_at": observed,
+            "trusted_time_receipt_sha256": chr(97 + index) * 64,
+            "trusted_time_signer_sha256": chr(99 + index) * 64,
+        }, identity
+
+    with patch(
+        "py_security_suite.trusted_time._verify_rfc3161_receipt",
+        side_effect=[receipt(1), receipt(2)],
+    ):
+        with pytest.raises(ValueError, match="must be independent"):
+            verify_rfc3161(Path("context.json"), [{}, {}], "a" * 64)
+
+
+def test_trusted_time_quorum_counts_one_tsa_once_across_pem_der_and_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
+    certificate = x509.load_pem_x509_certificate(_timestamp_certificate(observed))
+    pem = tmp_path / "tsa.pem"
+    der = tmp_path / "tsa.der"
+    pem.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    der.write_bytes(certificate.public_bytes(serialization.Encoding.DER))
+    (tmp_path / "receipt.tsr").write_bytes(b"bounded-rfc3161-response")
+    anchor = certificate.fingerprint(hashes.SHA256()).hex()
+
+    def member(authority: str, signer: Path) -> dict[str, object]:
+        return {
+            "format": "rfc3161",
+            "authority": authority,
+            "observed_at": observed.isoformat(),
+            "receipt_file": "receipt.tsr",
+            "receipt_sha256": hashlib.sha256(b"bounded-rfc3161-response").hexdigest(),
+            "signer_certificate_file": signer.name,
+            "signer_certificate_sha256": hashlib.sha256(
+                signer.read_bytes()
+            ).hexdigest(),
+            "nonce": 42,
+        }
+
+    values = [member("Org TSA", pem), member("  org   tsa ", der)]
+    monkeypatch.setenv(
+        "PYSEC_TSA_SIGNER_SHA256",
+        ",".join(str(item["signer_certificate_sha256"]) for item in values),
+    )
+    monkeypatch.setenv("PYSEC_TSA_AUTHORITIES", f"org tsa={anchor}")
+    with (
+        patch(
+            "py_security_suite.trusted_time.rfc3161ng.decode_timestamp_response",
+            return_value={"timeStampToken": "token"},
+        ),
+        patch("py_security_suite.trusted_time.rfc3161ng.check_timestamp"),
+        patch(
+            "py_security_suite.trusted_time.rfc3161ng.get_timestamp",
+            return_value=observed,
+        ),
+    ):
+        # Two evidence files with different bytes and two spellings of one
+        # name are still one TSA and must not satisfy a two-member quorum.
+        with pytest.raises(ValueError, match="must be independent"):
+            verify_rfc3161(tmp_path / "context.json", values, "a" * 64)
+
+        # Distinct names that are not bound to a trust anchor cannot form a
+        # quorum: otherwise one TSA could simply claim a second identity.
+        values[1]["authority"] = "other tsa"
+        monkeypatch.setenv("PYSEC_TSA_AUTHORITIES", f"org tsa={anchor},other tsa")
+        with pytest.raises(ValueError, match="not bound to a pinned trust anchor"):
+            verify_rfc3161(tmp_path / "context.json", values, "a" * 64)
+
+        # A single receipt still verifies with an unbound name, but a bound
+        # name must chain to the anchor it is bound to.
+        assert verify_rfc3161(tmp_path / "context.json", values[1], "a" * 64)
+        monkeypatch.setenv("PYSEC_TSA_AUTHORITIES", f"org tsa={'f' * 64}")
+        with pytest.raises(ValueError, match="not bound to this trust anchor"):
+            verify_rfc3161(tmp_path / "context.json", values[0], "a" * 64)
+
+
+def test_trusted_time_authority_policy_normalizes_and_binds_anchors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PYSEC_TSA_AUTHORITIES", f"TSA  A={'A' * 64}, tsa a={'b' * 64},tsa-b"
+    )
+    assert _authority_policy() == {
+        "tsa a": frozenset({"a" * 64, "b" * 64}),
+        "tsa-b": frozenset(),
+    }
+    monkeypatch.setenv("PYSEC_TSA_AUTHORITIES", "tsa-a=not-a-digest")
+    with pytest.raises(ValueError, match="unavailable or invalid"):
+        _authority_policy()
+    monkeypatch.setenv("PYSEC_TSA_AUTHORITIES", f"tsa-a={'a' * 64},tsa-b={'a' * 64}")
+    with pytest.raises(ValueError, match="one trust anchor to two authorities"):
+        _authority_policy()
+
+
+def test_timestamp_signer_eku_must_be_critical_and_exclusive() -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "TSA")])
+
+    def certificate(
+        usages: list[x509.ObjectIdentifier], *, critical: bool
+    ) -> x509.Certificate:
+        return (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(observed - timedelta(hours=1))
+            .not_valid_after(observed + timedelta(hours=1))
+            .add_extension(x509.ExtendedKeyUsage(usages), critical=critical)
+            .sign(key, hashes.SHA256())
+        )
+
+    _verify_timestamping_eku(
+        certificate([ExtendedKeyUsageOID.TIME_STAMPING], critical=True)
+    )
+    with pytest.raises(ValueError, match="must be critical"):
+        _verify_timestamping_eku(
+            certificate([ExtendedKeyUsageOID.TIME_STAMPING], critical=False)
+        )
+    with pytest.raises(ValueError, match="only id-kp-timeStamping"):
+        _verify_timestamping_eku(
+            certificate(
+                [ExtendedKeyUsageOID.TIME_STAMPING, ExtendedKeyUsageOID.CODE_SIGNING],
+                critical=True,
+            )
+        )
+    with pytest.raises(ValueError, match="only id-kp-timeStamping"):
+        _verify_timestamping_eku(
+            certificate([ExtendedKeyUsageOID.CODE_SIGNING], critical=True)
+        )
+
+
+@pytest.mark.parametrize(
+    ("reason", "revoked_offset", "message"),
+    [
+        (x509.ReasonFlags.key_compromise, timedelta(days=2), "key was compromised"),
+        (x509.ReasonFlags.ca_compromise, timedelta(days=2), "key was compromised"),
+        (x509.ReasonFlags.unspecified, timedelta(days=2), "key was compromised"),
+        (x509.ReasonFlags.superseded, -timedelta(seconds=1), "revoked at issuance"),
+        (x509.ReasonFlags.superseded, timedelta(days=2), None),
+        (x509.ReasonFlags.cessation_of_operation, timedelta(days=2), None),
+    ],
+)
+def test_trusted_time_key_compromise_revocation_applies_regardless_of_date(
+    reason: x509.ReasonFlags, revoked_offset: timedelta, message: str | None
+) -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
+    root_key, root, leaf = _timestamp_chain(observed)
+    revoked = (
+        x509.RevokedCertificateBuilder()
+        .serial_number(leaf.serial_number)
+        .revocation_date(observed + revoked_offset)
+        .add_extension(x509.CRLReason(reason), critical=False)
+        .build()
+    )
+    # A CRL published well after issuance is the only place a later key
+    # compromise can appear, so it must be accepted and honored.
+    crl = (
+        x509.CertificateRevocationListBuilder()
+        .issuer_name(root.subject)
+        .last_update(observed + timedelta(days=3))
+        .next_update(observed + timedelta(days=10))
+        .add_revoked_certificate(revoked)
+        .sign(root_key, hashes.SHA256())
+    )
+    raw = crl.public_bytes(serialization.Encoding.PEM)
+    if message is None:
+        _verify_revocation([leaf], [root], raw, observed)
+    else:
+        with pytest.raises(ValueError, match=message):
+            _verify_revocation([leaf], [root], raw, observed)
+
+
+def test_trusted_time_rejects_revocation_snapshot_expired_before_issuance() -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
+    root_key, root, leaf = _timestamp_chain(observed)
+    crl = (
+        x509.CertificateRevocationListBuilder()
+        .issuer_name(root.subject)
+        .last_update(observed - timedelta(hours=2))
+        .next_update(observed - timedelta(hours=1))
+        .sign(root_key, hashes.SHA256())
+    )
+    with pytest.raises(ValueError, match="not valid at issuance"):
+        _verify_revocation(
+            [leaf], [root], crl.public_bytes(serialization.Encoding.PEM), observed
+        )
+
+
+def test_trusted_time_chain_returns_reached_trust_anchor() -> None:
+    observed = datetime(2026, 8, 30, 12, tzinfo=UTC)
+    _, root, leaf = _timestamp_chain(observed)
+    assert _verify_chain([leaf], [root], observed) == root

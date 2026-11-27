@@ -220,7 +220,13 @@ def _verify_key_lifecycle(
     if (
         not not_before <= signed_at <= expires_at <= not_after
         or not not_before <= observed_at <= not_after
-        or (revoked_at is not None and signed_at >= revoked_at)
+        # ``signed_at`` is asserted by the signer, so a compromised key could
+        # backdate it. Revocation is therefore enforced against the verifier's
+        # observation time as well as the asserted signing time.
+        or (
+            revoked_at is not None
+            and (signed_at >= revoked_at or observed_at >= revoked_at)
+        )
     ):
         raise ValueError("organization authority key is outside its lifecycle")
 
