@@ -495,8 +495,11 @@ artifact also records its confidence, completeness, graph size, and applied
 precision controls. Typed-receiver or framework-resolution flags describe the
 semantic model used; they are not claims that the target executed.
 
-If `policy.required_scanners` is empty, every selected and applicable tool is
-required. A conditional tool with no matching input is reported as
+Every selected and applicable tool is required. `policy.required_scanners`
+adds scanners to the profile's required set; it never narrows it, so listing
+only `bandit` does not make another profile scanner optional; disabling a
+profile scanner that is not explicitly required is allowed for diagnostic
+subsets but makes the result `INCOMPLETE`. A conditional tool with no matching input is reported as
 `not applicable`; it does not make the scan incomplete. An applicable tool
 that is unavailable, fails, times out, or cannot be parsed produces
 `INCOMPLETE`.
@@ -504,7 +507,12 @@ that is unavailable, fails, times out, or cannot be parsed produces
 The `production` profile additionally:
 
 - blocks `medium`, `high`, and `critical` findings even if repository
-  configuration lists only high and critical;
+  configuration lists only high and critical, and blocks `unknown`-severity
+  findings because an unrated finding cannot be shown to be below the threshold;
+- never suppresses a known-exploited (KEV) finding through a risk acceptance,
+  requires every acceptance to declare `max_severity`, and requires the
+  acceptance ledger digest (`risk_acceptance_sha256`) to be pinned by the
+  organization policy whenever `risk_acceptance_path` is set;
 - requires an organization-approved `executable_sha256` for every applicable
   scanner and verifies the resolved entry point again after execution;
 - requires a separate `auxiliary_executable_sha256` for the CodeQL CLI;
@@ -802,11 +810,13 @@ max_workers = 4
 max_output_bytes = 16777216
 
 [policy]
-# Derive required scanners from the selected profile.
+# Scanners required in addition to every scanner in the selected profile.
 required_scanners = []
 block_severities = ["critical", "high"]
+# Must remain true: incomplete scans always block.
 incomplete_is_blocking = true
-# Optional governed, expiring finding dispositions.
+# Optional governed, expiring finding dispositions. In production/release the
+# digest must be set by the organization policy, not the repository.
 # risk_acceptance_path = "security/risk-acceptances.json"
 # risk_acceptance_sha256 = "<approved-ledger-sha256>"
 
@@ -1040,7 +1050,9 @@ report. The envelope uses X25519, HKDF-SHA256, and AES-256-GCM.
 | Tool rules/database digest | Each configured `rules_path` or `database_path` requires a matching organization-approved SHA-256 in production/release; file or canonical symlink-free directory digests are checked before and after execution, while the scanner receives only a private per-run snapshot verified before and after use |
 | `minimum_coverage_percent` | Numeric value from 0 through 100 |
 | `maximum_database_age_days` | Numeric value from 0.1 through 3650; enforced for staged OSV and Grype databases |
-| `policy.risk_acceptance_sha256` | Exactly 64 hexadecimal characters when supplied |
+| `policy.risk_acceptance_sha256` | Exactly 64 hexadecimal characters when supplied; in production/release it is required whenever `risk_acceptance_path` is set and must come from the organization policy |
+| `policy.incomplete_is_blocking` | Must be `true`; incomplete scans always exit 2 and `false` is rejected |
+| Boolean settings | Must be TOML booleans; strings such as `"false"` are rejected |
 
 Supported severities are `critical`, `high`, `medium`, `low`,
 `informational`, and `unknown`.
@@ -1053,6 +1065,12 @@ owned by the deployment/runner, not by the repository being scanned.
 
 A repository cannot:
 
+- select a weaker `profile` than the organization policy's `profile`. The
+  organization profile is a floor for both repository configuration and
+  `--profile`: `production` may only be raised to `release`, `release` cannot
+  change, and any other profile may only move to a profile that runs every
+  scanner of the floor profile (for example `quick` to `standard`). Without an
+  organization `profile`, any profile remains selectable;
 - change organization-required `network = "deny"`;
 - enable target code execution;
 - disable organization-required isolation attestation;
@@ -1316,7 +1334,10 @@ The stable error codes are `configuration_error`, `io_error`, and
 | CLI error | 3 | Invocation, configuration, or safe-output validation failed |
 
 Completeness is evaluated before severity. An unavailable applicable scanner
-cannot be masked by an otherwise empty finding set.
+cannot be masked by an otherwise empty finding set. When a scan is
+`INCOMPLETE` and findings already meet blocking criteria, the policy reasons
+state that count so a would-be `FAIL` is not hidden behind exit code 2.
+`--diagnostic-without-isolation` always yields `INCOMPLETE`.
 Encryption additionally requires digest-pinned, Ed25519-signed key-lifecycle
 and provider-attestation receipts from distinct configured authorities. The
 receipts name the KMS/HSM provider, key ID and generation, active validity

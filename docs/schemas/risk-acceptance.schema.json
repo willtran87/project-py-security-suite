@@ -25,7 +25,15 @@
           },
           "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
           "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
-          "expires": { "type": "string", "format": "date" }
+          "expires": { "type": "string", "format": "date" },
+          "max_severity": {
+            "description": "Highest severity this acceptance covers; required in production and release.",
+            "enum": ["critical", "high", "medium", "low", "informational"]
+          },
+          "known_exploited": {
+            "description": "Acknowledges known-exploited status; ignored in production and release, where KEV findings are never suppressed.",
+            "type": "boolean"
+          }
         }
       }
     }
