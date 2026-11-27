@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "acceptances": [
+    {
+      "fingerprint": "sha256:5d51a210f08e443791a05ca73006cf2a672b64cb520a3db64740764acb7d2910",
+      "finding_id": "PYSEC-5D51A210F08E",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-5h93-6whr-6q8j affects mcp 1.29.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code is the MCP SDK client/server transport and OAuth paths, which `semgrep scan` never starts.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:60e26a9bc3410a752ee54144f5865fd0c53aa5796fdb93c62b305e1b6519f2f3",
+      "finding_id": "PYSEC-60E26A9BC341",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-84m7-p3x7-pcfv affects mcp 1.29.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code is the MCP SDK client/server transport and OAuth paths, which `semgrep scan` never starts.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:63fcaec0751e60c62832ef45e8173ee74fed4c855690fd54d51bfeac0cfe51fc",
+      "finding_id": "PYSEC-63FCAEC0751E",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-mf5v-w3w3-f6cg affects opentelemetry-api 1.37.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code parses inbound traceparent/tracestate headers, which offline `semgrep scan` never receives.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:73f1a0bc2521eeed49e4d759d47a40193dcdc642ef4a02c8b9f0a2976b19e494",
+      "finding_id": "PYSEC-73F1A0BC2521",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-w4fh-qvv9-3v23 affects mcp 1.29.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code is the MCP SDK client/server transport and OAuth paths, which `semgrep scan` never starts.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:9f9be72b29e62ec972bee0fd7691821da1e0c795fc151213d8642a1c8cdf7753",
+      "finding_id": "PYSEC-9F9BE72B29E6",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-qx49-fqc8-xw99 affects mcp 1.29.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code is the MCP SDK client/server transport and OAuth paths, which `semgrep scan` never starts.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:b7baf6da7bcc97e9084fe37f82f23c4965588857585eee99399ea6c16ac3f7c5",
+      "finding_id": "PYSEC-B7BAF6DA7BCC",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-53pm-wgxf-c6qf affects wcmatch 8.5.2. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Semgrep matches target paths with wcmatch, so the ReDoS is bounded only by the scanner's process timeout, resource limits and network isolation rather than eliminated.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:cbf4553ed821807aab4f7efa2f5722b8d4340c03d57e00c8771785ba2e45efef",
+      "finding_id": "PYSEC-CBF4553ED821",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-xcq7-p3pf-p88h affects opentelemetry-api 1.37.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code parses inbound traceparent/tracestate headers, which offline `semgrep scan` never receives.",
+      "expires": "2027-01-26"
+    },
+    {
+      "fingerprint": "sha256:fa3d6fd341ce3dfb30f0975db411ba0b2a7339d1cbdf366b672edab3739b2b7d",
+      "finding_id": "PYSEC-FA3D6FD341CE",
+      "disposition": "accepted_risk",
+      "owner": "@willtran87 (Python Security Suite maintainer)",
+      "rationale": "GHSA-rwrf-2pqf-9j8j affects mcp 1.29.0. Transitively pinned exactly by semgrep==1.187.0 in the scanner image lock; no fixed Semgrep release relaxes the pin. The suite invokes `semgrep scan` offline with metrics and version checks disabled and does not use Semgrep's MCP server or OpenTelemetry export. Affected code is the MCP SDK client/server transport and OAuth paths, which `semgrep scan` never starts.",
+      "expires": "2027-01-26"
+    }
+  ]
+}

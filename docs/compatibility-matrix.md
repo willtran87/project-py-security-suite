@@ -54,6 +54,28 @@ every Semgrep update; the scanner lock is otherwise kept free of known
 advisories, and the root and companion locks are audited weekly by the
 scheduled dependency audit workflow.
 
+The deep-assurance self-scan governs exactly these eight OSV findings through
+the `security/self-scan-risk-acceptances.json` ledger, whose SHA-256 is pinned
+in `security/self-scan.toml`:
+
+| Package | Advisories accepted |
+|---|---|
+| `mcp` 1.29.0 | GHSA-5h93-6whr-6q8j, GHSA-84m7-p3x7-pcfv, GHSA-w4fh-qvv9-3v23, GHSA-qx49-fqc8-xw99, GHSA-rwrf-2pqf-9j8j |
+| `opentelemetry-api` 1.37.0 | GHSA-mf5v-w3w3-f6cg, GHSA-xcq7-p3pf-p88h |
+| `wcmatch` 8.5.2 | GHSA-53pm-wgxf-c6qf |
+
+- **Matching:** each entry is bound to the exact finding fingerprint and
+  finding ID; any other finding, including a new advisory against the same
+  packages, still blocks.
+- **Expiry:** every entry expires on **2027-01-26**. After that date the
+  self-scan fails closed until the pins are lifted or the acceptance is
+  re-approved.
+- **Stale entries:** an entry that no longer matches a current finding is a
+  policy error, so the ledger must be cleaned up when Semgrep relaxes the pins.
+- **Severity bound:** add `max_severity` (`high` for all eight) once the bounded
+  acceptance format is available on this branch; it is required only for the
+  production and release profiles.
+
 ## Meaning of support
 
 `Adapter implemented` means the suite can construct an offline-oriented
