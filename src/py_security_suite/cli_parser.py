@@ -1,6 +1,8 @@
 """Argument parser for the ``pysec`` command line.
 
-Each subcommand is registered by its own builder function.
+Each subcommand is registered by its own builder function. The module only
+imports lightweight constants so ``pysec --help`` and argument errors do not
+load the scanning, reporting and trust machinery.
 """
 
 from __future__ import annotations
@@ -8,15 +10,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .audience_report import AUDIENCES
-from .benchmark_assurance import BENCHMARK_REPLAY_GENESIS_SHA256
+from .audiences import AUDIENCES
+from .benchmark_replay_genesis import BENCHMARK_REPLAY_GENESIS_SHA256
 from .cli_benchmark_arguments import add_benchmark_commands
 from .cli_recovery import add_recovery_commands
 from .cli_release_arguments import add_release_check_command
 from .cli_scan import add_scan_arguments
-from .config import PROFILE_TOOLS
+from .config_profiles import PROFILE_TOOLS
 from .project_init import PROJECT_TEMPLATES
-from .report_inspection import BUNDLED_SCHEMA_RESOURCES
+from .report_schema_resources import BUNDLED_SCHEMA_RESOURCES
 from .version import __version__
 
 

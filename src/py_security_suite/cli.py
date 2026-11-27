@@ -6,136 +6,359 @@ import json
 import os
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
-
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from typing import TYPE_CHECKING, Any
 
 from .cli_parser import build_parser as build_parser
-from .cli_scan import progress_sink
-from .cli_recovery import recovery_command
-from .scan_control import ScanControl, controlled_scan
-from .adapter_conformance import (
-    assess_adapter_conformance,
-    render_adapter_conformance,
-)
-from .advanced_delta import compare_advanced_analysis, render_advanced_delta_markdown
-from .baseline_candidate import build_baseline_candidate
-from .bundle_qualification import (
-    qualify_bundle,
-    render_bundle_qualification,
-    render_bundle_qualification_markdown,
-)
-from .audit_package import create_audit_package, verify_audit_package
-from .audience_report import build_audience_report, render_audience_markdown
-from .ci_workflow import build_github_workflow, render_workflow_receipt
-from .closure_plan import build_closure_plan, render_closure_plan_markdown
-from .config import ConfigurationError, PROFILE_TOOLS, load_config
-from .config_advisor import (
-    advise_configuration,
-    render_config_advice,
-    render_config_advice_markdown,
-)
-from .config_provenance import build_config_provenance
-from .confidential_archive import decrypt_report, encrypt_report
-from .report_retention import purge_verified_report, retention_status
-from .doctor import assess_readiness, render_readiness, render_readiness_markdown
-from .evidence_draft import build_governance_evidence_draft
-from .evidence_pack import create_evidence_pack, verify_evidence_pack
-from .finding_register import build_finding_register
-from .github_annotations import build_github_annotations, render_github_commands
-from .effectiveness_corpus import evaluate_report_corpus
-from .benchmark_execution import execute_benchmark_manifest
-from .benchmark_runtime import (
-    BenchmarkRuntimeError,
-    probe_oci_runtime_capabilities,
-)
-from .benchmark_compiler import compile_benchmark_manifest
-from .benchmark_adapters import benchmark_execution_contracts
-from .benchmark_signing import (
-    ExternalEd25519SigningProvider,
-    load_external_signing_provider_profile,
-    verify_signing_provider_conformance,
-)
-from .benchmark_telemetry import (
-    DurableJsonlSecurityEventSink,
-    verify_durable_security_event_log,
-)
-from .path_safety import read_regular_file
-from .assurance_catalog import (
-    build_standards_source_manifest,
-    export_assurance_catalog,
-)
-from .execution import sanitize_terminal_text
-from .native_bundle import (
-    render_native_bundle_verification,
-    render_native_bundle_verification_markdown,
-    verify_native_bundle,
-)
-from .orchestrator import scan_project
-from .operational_trend import (
-    build_operational_trend,
-    render_operational_trend_markdown,
-)
-from .policy import exit_code
-from .policy_simulation import simulate_policy
-from .precommit_config import build_precommit_config, render_precommit_receipt
-from .project_init import (
-    build_init_receipt,
-    project_profile,
-    render_init_receipt,
-    render_project_config,
-)
-from .provisioning import (
-    build_provision_plan,
-    render_provision_plan,
-    render_provision_plan_markdown,
-)
-from .portfolio_dashboard import build_portfolio_dashboard
-from .promotion import (
-    build_promotion_plan,
-    render_promotion_html,
-    render_promotion_markdown,
-)
-from .coverage_merge import merge_coverage_scenarios
-from .passport import (
-    create_attestation,
-    sign_release_artifacts,
-    verify_attestation,
-    verify_report,
-)
-from .path_safety import resolve_regular_directory, resolve_unlinked_path
-from .report_inspection import (
-    inspect_report,
-    read_bundled_schema,
-    report_verification_receipt,
-    render_inspection,
-    verify_inspection,
-)
-from .reports import is_complete_report
-from .reachability import analyze_project
-from .reachability_delta import compare_reachability
-from .release_payload import prepare_signing_request, verify_signing_request
-from .release_manifest import (
-    build_release_evidence_manifest,
-    verify_release_evidence_manifest,
-)
-from .release_readiness import assess_release_readiness
-from .reproducibility import (
-    compare_builds,
-    normalize_sdist,
-    render_reproducibility_markdown,
-)
-from .standards_monitor import (
-    monitor_standard_sources,
-    verify_standards_monitor_report,
-)
-from .trusted_observation import governed_now, scan_time_identity
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    from .cli_scan import progress_sink
+    from .cli_recovery import recovery_command
+    from .scan_control import ScanControl, controlled_scan
+    from .adapter_conformance import (
+        assess_adapter_conformance,
+        render_adapter_conformance,
+    )
+    from .advanced_delta import (
+        compare_advanced_analysis,
+        render_advanced_delta_markdown,
+    )
+    from .baseline_candidate import build_baseline_candidate
+    from .bundle_qualification import (
+        qualify_bundle,
+        render_bundle_qualification,
+        render_bundle_qualification_markdown,
+    )
+    from .audit_package import create_audit_package, verify_audit_package
+    from .audience_report import build_audience_report, render_audience_markdown
+    from .ci_workflow import build_github_workflow, render_workflow_receipt
+    from .closure_plan import build_closure_plan, render_closure_plan_markdown
+    from .config import ConfigurationError, PROFILE_TOOLS, load_config
+    from .config_advisor import (
+        advise_configuration,
+        render_config_advice,
+        render_config_advice_markdown,
+    )
+    from .config_provenance import build_config_provenance
+    from .confidential_archive import decrypt_report, encrypt_report
+    from .report_retention import purge_verified_report, retention_status
+    from .doctor import assess_readiness, render_readiness, render_readiness_markdown
+    from .evidence_draft import build_governance_evidence_draft
+    from .evidence_pack import create_evidence_pack, verify_evidence_pack
+    from .finding_register import build_finding_register
+    from .github_annotations import build_github_annotations, render_github_commands
+    from .effectiveness_corpus import evaluate_report_corpus
+    from .benchmark_execution import execute_benchmark_manifest
+    from .benchmark_runtime import (
+        BenchmarkRuntimeError,
+        probe_oci_runtime_capabilities,
+    )
+    from .benchmark_compiler import compile_benchmark_manifest
+    from .benchmark_adapters import benchmark_execution_contracts
+    from .benchmark_signing import (
+        ExternalEd25519SigningProvider,
+        load_external_signing_provider_profile,
+        verify_signing_provider_conformance,
+    )
+    from .benchmark_telemetry import (
+        DurableJsonlSecurityEventSink,
+        verify_durable_security_event_log,
+    )
+    from .path_safety import read_regular_file
+    from .assurance_catalog import (
+        build_standards_source_manifest,
+        export_assurance_catalog,
+    )
+    from .execution import sanitize_terminal_text
+    from .native_bundle import (
+        render_native_bundle_verification,
+        render_native_bundle_verification_markdown,
+        verify_native_bundle,
+    )
+    from .orchestrator import scan_project
+    from .operational_trend import (
+        build_operational_trend,
+        render_operational_trend_markdown,
+    )
+    from .policy import exit_code
+    from .policy_simulation import simulate_policy
+    from .precommit_config import build_precommit_config, render_precommit_receipt
+    from .project_init import (
+        build_init_receipt,
+        project_profile,
+        render_init_receipt,
+        render_project_config,
+    )
+    from .provisioning import (
+        build_provision_plan,
+        render_provision_plan,
+        render_provision_plan_markdown,
+    )
+    from .portfolio_dashboard import build_portfolio_dashboard
+    from .promotion import (
+        build_promotion_plan,
+        render_promotion_html,
+        render_promotion_markdown,
+    )
+    from .coverage_merge import merge_coverage_scenarios
+    from .passport import (
+        create_attestation,
+        sign_release_artifacts,
+        verify_attestation,
+        verify_report,
+    )
+    from .path_safety import resolve_regular_directory, resolve_unlinked_path
+    from .report_inspection import (
+        inspect_report,
+        read_bundled_schema,
+        report_verification_receipt,
+        render_inspection,
+        verify_inspection,
+    )
+    from .reports import is_complete_report
+    from .reachability import analyze_project
+    from .reachability_delta import compare_reachability
+    from .release_payload import prepare_signing_request, verify_signing_request
+    from .release_manifest import (
+        build_release_evidence_manifest,
+        verify_release_evidence_manifest,
+    )
+    from .release_readiness import assess_release_readiness
+    from .reproducibility import (
+        compare_builds,
+        normalize_sdist,
+        render_reproducibility_markdown,
+    )
+    from .standards_monitor import (
+        monitor_standard_sources,
+        verify_standards_monitor_report,
+    )
+    from .trusted_observation import governed_now, scan_time_identity
+
+
+# Subcommand implementations are imported when a command is dispatched, so
+# ``pysec --help``, ``--version`` and usage errors do not load the scanning,
+# reporting and trust stack. Keep this table in sync with the TYPE_CHECKING
+# imports above, and start every function that uses one of these names with
+# ``_load_command_dependencies()`` so it also works when called directly
+# (tests/test_cli_lazy_imports.py enforces both rules).
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "BenchmarkRuntimeError": (".benchmark_runtime", "BenchmarkRuntimeError"),
+    "ConfigurationError": (".config", "ConfigurationError"),
+    "DurableJsonlSecurityEventSink": (
+        ".benchmark_telemetry",
+        "DurableJsonlSecurityEventSink",
+    ),
+    "Ed25519PublicKey": (
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        "Ed25519PublicKey",
+    ),
+    "ExternalEd25519SigningProvider": (
+        ".benchmark_signing",
+        "ExternalEd25519SigningProvider",
+    ),
+    "PROFILE_TOOLS": (".config", "PROFILE_TOOLS"),
+    "ScanControl": (".scan_control", "ScanControl"),
+    "advise_configuration": (".config_advisor", "advise_configuration"),
+    "analyze_project": (".reachability", "analyze_project"),
+    "assess_adapter_conformance": (
+        ".adapter_conformance",
+        "assess_adapter_conformance",
+    ),
+    "assess_readiness": (".doctor", "assess_readiness"),
+    "assess_release_readiness": (".release_readiness", "assess_release_readiness"),
+    "benchmark_execution_contracts": (
+        ".benchmark_adapters",
+        "benchmark_execution_contracts",
+    ),
+    "build_audience_report": (".audience_report", "build_audience_report"),
+    "build_baseline_candidate": (".baseline_candidate", "build_baseline_candidate"),
+    "build_closure_plan": (".closure_plan", "build_closure_plan"),
+    "build_config_provenance": (".config_provenance", "build_config_provenance"),
+    "build_finding_register": (".finding_register", "build_finding_register"),
+    "build_github_annotations": (".github_annotations", "build_github_annotations"),
+    "build_github_workflow": (".ci_workflow", "build_github_workflow"),
+    "build_governance_evidence_draft": (
+        ".evidence_draft",
+        "build_governance_evidence_draft",
+    ),
+    "build_init_receipt": (".project_init", "build_init_receipt"),
+    "build_operational_trend": (".operational_trend", "build_operational_trend"),
+    "build_portfolio_dashboard": (".portfolio_dashboard", "build_portfolio_dashboard"),
+    "build_precommit_config": (".precommit_config", "build_precommit_config"),
+    "build_promotion_plan": (".promotion", "build_promotion_plan"),
+    "build_provision_plan": (".provisioning", "build_provision_plan"),
+    "build_release_evidence_manifest": (
+        ".release_manifest",
+        "build_release_evidence_manifest",
+    ),
+    "build_standards_source_manifest": (
+        ".assurance_catalog",
+        "build_standards_source_manifest",
+    ),
+    "compare_advanced_analysis": (".advanced_delta", "compare_advanced_analysis"),
+    "compare_builds": (".reproducibility", "compare_builds"),
+    "compare_reachability": (".reachability_delta", "compare_reachability"),
+    "compile_benchmark_manifest": (".benchmark_compiler", "compile_benchmark_manifest"),
+    "controlled_scan": (".scan_control", "controlled_scan"),
+    "create_attestation": (".passport", "create_attestation"),
+    "create_audit_package": (".audit_package", "create_audit_package"),
+    "create_evidence_pack": (".evidence_pack", "create_evidence_pack"),
+    "decrypt_report": (".confidential_archive", "decrypt_report"),
+    "encrypt_report": (".confidential_archive", "encrypt_report"),
+    "evaluate_report_corpus": (".effectiveness_corpus", "evaluate_report_corpus"),
+    "execute_benchmark_manifest": (
+        ".benchmark_execution",
+        "execute_benchmark_manifest",
+    ),
+    "exit_code": (".policy", "exit_code"),
+    "export_assurance_catalog": (".assurance_catalog", "export_assurance_catalog"),
+    "governed_now": (".trusted_observation", "governed_now"),
+    "inspect_report": (".report_inspection", "inspect_report"),
+    "is_complete_report": (".reports", "is_complete_report"),
+    "load_config": (".config", "load_config"),
+    "load_external_signing_provider_profile": (
+        ".benchmark_signing",
+        "load_external_signing_provider_profile",
+    ),
+    "merge_coverage_scenarios": (".coverage_merge", "merge_coverage_scenarios"),
+    "monitor_standard_sources": (".standards_monitor", "monitor_standard_sources"),
+    "normalize_sdist": (".reproducibility", "normalize_sdist"),
+    "prepare_signing_request": (".release_payload", "prepare_signing_request"),
+    "probe_oci_runtime_capabilities": (
+        ".benchmark_runtime",
+        "probe_oci_runtime_capabilities",
+    ),
+    "progress_sink": (".cli_scan", "progress_sink"),
+    "project_profile": (".project_init", "project_profile"),
+    "purge_verified_report": (".report_retention", "purge_verified_report"),
+    "qualify_bundle": (".bundle_qualification", "qualify_bundle"),
+    "read_bundled_schema": (".report_inspection", "read_bundled_schema"),
+    "read_regular_file": (".path_safety", "read_regular_file"),
+    "recovery_command": (".cli_recovery", "recovery_command"),
+    "render_adapter_conformance": (
+        ".adapter_conformance",
+        "render_adapter_conformance",
+    ),
+    "render_advanced_delta_markdown": (
+        ".advanced_delta",
+        "render_advanced_delta_markdown",
+    ),
+    "render_audience_markdown": (".audience_report", "render_audience_markdown"),
+    "render_bundle_qualification": (
+        ".bundle_qualification",
+        "render_bundle_qualification",
+    ),
+    "render_bundle_qualification_markdown": (
+        ".bundle_qualification",
+        "render_bundle_qualification_markdown",
+    ),
+    "render_closure_plan_markdown": (".closure_plan", "render_closure_plan_markdown"),
+    "render_config_advice": (".config_advisor", "render_config_advice"),
+    "render_config_advice_markdown": (
+        ".config_advisor",
+        "render_config_advice_markdown",
+    ),
+    "render_github_commands": (".github_annotations", "render_github_commands"),
+    "render_init_receipt": (".project_init", "render_init_receipt"),
+    "render_inspection": (".report_inspection", "render_inspection"),
+    "render_native_bundle_verification": (
+        ".native_bundle",
+        "render_native_bundle_verification",
+    ),
+    "render_native_bundle_verification_markdown": (
+        ".native_bundle",
+        "render_native_bundle_verification_markdown",
+    ),
+    "render_operational_trend_markdown": (
+        ".operational_trend",
+        "render_operational_trend_markdown",
+    ),
+    "render_precommit_receipt": (".precommit_config", "render_precommit_receipt"),
+    "render_project_config": (".project_init", "render_project_config"),
+    "render_promotion_html": (".promotion", "render_promotion_html"),
+    "render_promotion_markdown": (".promotion", "render_promotion_markdown"),
+    "render_provision_plan": (".provisioning", "render_provision_plan"),
+    "render_provision_plan_markdown": (
+        ".provisioning",
+        "render_provision_plan_markdown",
+    ),
+    "render_readiness": (".doctor", "render_readiness"),
+    "render_readiness_markdown": (".doctor", "render_readiness_markdown"),
+    "render_reproducibility_markdown": (
+        ".reproducibility",
+        "render_reproducibility_markdown",
+    ),
+    "render_workflow_receipt": (".ci_workflow", "render_workflow_receipt"),
+    "report_verification_receipt": (
+        ".report_inspection",
+        "report_verification_receipt",
+    ),
+    "resolve_regular_directory": (".path_safety", "resolve_regular_directory"),
+    "resolve_unlinked_path": (".path_safety", "resolve_unlinked_path"),
+    "retention_status": (".report_retention", "retention_status"),
+    "sanitize_terminal_text": (".execution", "sanitize_terminal_text"),
+    "scan_project": (".orchestrator", "scan_project"),
+    "scan_time_identity": (".trusted_observation", "scan_time_identity"),
+    "serialization": ("cryptography.hazmat.primitives", "serialization"),
+    "sign_release_artifacts": (".passport", "sign_release_artifacts"),
+    "simulate_policy": (".policy_simulation", "simulate_policy"),
+    "verify_attestation": (".passport", "verify_attestation"),
+    "verify_audit_package": (".audit_package", "verify_audit_package"),
+    "verify_durable_security_event_log": (
+        ".benchmark_telemetry",
+        "verify_durable_security_event_log",
+    ),
+    "verify_evidence_pack": (".evidence_pack", "verify_evidence_pack"),
+    "verify_inspection": (".report_inspection", "verify_inspection"),
+    "verify_native_bundle": (".native_bundle", "verify_native_bundle"),
+    "verify_release_evidence_manifest": (
+        ".release_manifest",
+        "verify_release_evidence_manifest",
+    ),
+    "verify_report": (".passport", "verify_report"),
+    "verify_signing_provider_conformance": (
+        ".benchmark_signing",
+        "verify_signing_provider_conformance",
+    ),
+    "verify_signing_request": (".release_payload", "verify_signing_request"),
+    "verify_standards_monitor_report": (
+        ".standards_monitor",
+        "verify_standards_monitor_report",
+    ),
+}
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module, attribute = _LAZY_IMPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    value = getattr(import_module(module, __package__), attribute)
+    globals()[name] = value
+    return value
+
+
+def _load_command_dependencies() -> None:
+    """Bind every lazily imported name before a command runs.
+
+    Names that are already bound (including test doubles installed with
+    ``unittest.mock.patch``) are left untouched.
+    """
+    namespace = globals()
+    for name in _LAZY_IMPORTS:
+        if name not in namespace:
+            __getattr__(name)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _load_command_dependencies()
     if args.command == "list-tools":
         return _list_tools_command(args)
     try:
@@ -146,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     handlers = {
         "recover-report": recovery_command,
         "schema": _schema_command,
@@ -210,6 +434,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
 
 
 def _encrypt_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = encrypt_report(
         args.report,
         args.output,
@@ -238,6 +463,7 @@ def _encrypt_report_command(args: argparse.Namespace) -> int:
 
 
 def _decrypt_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = decrypt_report(
         args.encrypted,
         args.output,
@@ -249,6 +475,7 @@ def _decrypt_report_command(args: argparse.Namespace) -> int:
 
 
 def _retention_status_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     print(  # lgtm[py/clear-text-logging-sensitive-data] verified digests and timestamps only
         json.dumps(retention_status(args.report), indent=2, sort_keys=True)
     )
@@ -256,6 +483,7 @@ def _retention_status_command(args: argparse.Namespace) -> int:
 
 
 def _purge_expired_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     print(
         json.dumps(
             purge_verified_report(
@@ -269,6 +497,7 @@ def _purge_expired_report_command(args: argparse.Namespace) -> int:
 
 
 def _init_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or (target / "pysec.toml")
     requested = requested if requested.is_absolute() else target / requested
@@ -298,6 +527,7 @@ def _init_command(args: argparse.Namespace) -> int:
 
 
 def _sign_artifacts_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     material = sign_release_artifacts(
         artifacts=args.artifacts,
         output=args.output,
@@ -314,6 +544,7 @@ def _sign_artifacts_command(args: argparse.Namespace) -> int:
 
 
 def _prepare_signing_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     request = prepare_signing_request(args.report, args.artifacts)
     rendered = json.dumps(request, indent=2, sort_keys=True)
     _write_atomic_output(
@@ -328,6 +559,7 @@ def _prepare_signing_command(args: argparse.Namespace) -> int:
 
 
 def _verify_signing_request_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-signing-request --overwrite requires --output")
     result = verify_signing_request(
@@ -354,6 +586,7 @@ def _verify_signing_request_command(args: argparse.Namespace) -> int:
 
 
 def _reachability_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "reachability target")
     document = analyze_project(
         target,
@@ -375,6 +608,7 @@ def _reachability_command(args: argparse.Namespace) -> int:
 
 
 def _reachability_diff_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("reachability-diff --overwrite requires --output")
     result = compare_reachability(
@@ -407,6 +641,7 @@ def _reachability_diff_command(args: argparse.Namespace) -> int:
 
 
 def _advanced_diff_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("advanced-diff --overwrite requires --output")
     result = compare_advanced_analysis(
@@ -440,6 +675,7 @@ def _advanced_diff_command(args: argparse.Namespace) -> int:
 
 
 def _doctor_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("doctor --overwrite requires --output")
     config = load_config(
@@ -467,6 +703,7 @@ def _doctor_command(args: argparse.Namespace) -> int:
 
 
 def _provision_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("provision-plan --overwrite requires --output")
     config = load_config(
@@ -494,6 +731,7 @@ def _provision_plan_command(args: argparse.Namespace) -> int:
 
 
 def _attest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     material = create_attestation(
         report=args.report,
         output=args.output,
@@ -510,6 +748,7 @@ def _attest_command(args: argparse.Namespace) -> int:
 
 
 def _verify_attestation_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify --overwrite requires --output")
     if args.output and args.format != "json":
@@ -541,6 +780,7 @@ def _verify_attestation_command(args: argparse.Namespace) -> int:
 
 
 def _verify_inspection_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-inspection --overwrite requires --output")
     if args.output and args.format != "json":
@@ -573,6 +813,7 @@ def _verify_inspection_command(args: argparse.Namespace) -> int:
 
 
 def _inspect_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("inspect --overwrite requires --output")
     inspection = inspect_report(args.report, limit=args.limit)
@@ -599,6 +840,7 @@ def _print_portable(value: str) -> None:
 
 
 def _scan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.network_isolated and args.diagnostic_without_isolation:
         raise ValueError(
             "--network-isolated and --diagnostic-without-isolation cannot be used together"
@@ -639,6 +881,7 @@ def _scan_command(args: argparse.Namespace) -> int:
 
 def _schema_command(args: argparse.Namespace) -> int:
     """Render or safely publish one version-explicit installed schema."""
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("schema --overwrite requires --output")
     rendered_schema = read_bundled_schema(str(args.name))
@@ -654,6 +897,7 @@ def _schema_command(args: argparse.Namespace) -> int:
 
 
 def _adapter_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("adapter-check --overwrite requires --output")
     document = assess_adapter_conformance()
@@ -674,6 +918,7 @@ def _adapter_check_command(args: argparse.Namespace) -> int:
 
 
 def _qualify_bundle_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("qualify-bundle --overwrite requires --output")
     config = load_config(
@@ -710,6 +955,7 @@ def _qualify_bundle_command(args: argparse.Namespace) -> int:
 
 
 def _verify_native_bundle_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-native-bundle --overwrite requires --output")
     document = verify_native_bundle(
@@ -738,6 +984,7 @@ def _verify_native_bundle_command(args: argparse.Namespace) -> int:
 
 
 def _generate_ci_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or Path(".github/workflows/python-security.yml")
     requested = requested if requested.is_absolute() else target / requested
@@ -771,6 +1018,7 @@ def _generate_ci_command(args: argparse.Namespace) -> int:
 
 
 def _generate_hooks_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or Path(".pre-commit-config.yaml")
     requested = requested if requested.is_absolute() else target / requested
@@ -798,6 +1046,7 @@ def _generate_hooks_command(args: argparse.Namespace) -> int:
 
 
 def _config_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("config-check --overwrite requires --output")
     document = advise_configuration(
@@ -824,6 +1073,7 @@ def _config_check_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("benchmark --overwrite requires --output")
     result = evaluate_report_corpus(
@@ -864,6 +1114,7 @@ def _benchmark_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_run_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     event_sink = (
         DurableJsonlSecurityEventSink(
             args.security_event_log,
@@ -915,6 +1166,7 @@ def _benchmark_run_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     provider = load_external_signing_provider_profile(args.profile, args.profile_sha256)
     configured_time = any(
         os.environ.get(name, "").strip()
@@ -945,6 +1197,7 @@ def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
 def _external_benchmark_signing_provider(
     args: argparse.Namespace,
 ) -> ExternalEd25519SigningProvider | None:
+    _load_command_dependencies()
     profile = args.receipt_signing_provider_profile
     profile_sha256 = args.receipt_signing_provider_profile_sha256
     executable = args.receipt_signing_provider_executable
@@ -1005,6 +1258,7 @@ def _external_benchmark_signing_provider(
 
 
 def _benchmark_runtime_probe_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if not args.authorize_execution:
         raise BenchmarkRuntimeError(
             "OCI runtime probing requires explicit --authorize-execution"
@@ -1027,12 +1281,14 @@ def _benchmark_runtime_probe_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_security_log_verify_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = verify_durable_security_event_log(args.log)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
 def _benchmark_prepare_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = compile_benchmark_manifest(args.request, args.workspace)
     rendered_manifest = json.dumps(result["manifest"], indent=2, sort_keys=True)
     _write_atomic_output(
@@ -1052,6 +1308,7 @@ def _benchmark_prepare_command(args: argparse.Namespace) -> int:
 
 
 def _assurance_catalog_export_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = export_assurance_catalog()
     rendered = json.dumps(result, indent=2, sort_keys=True)
     _write_atomic_output(
@@ -1065,6 +1322,7 @@ def _assurance_catalog_export_command(args: argparse.Namespace) -> int:
 
 
 def _standards_manifest_build_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     selected = set(args.standard) if args.standard else None
     result = build_standards_source_manifest(args.inventory, selected_ids=selected)
     rendered = json.dumps(result, indent=2, sort_keys=True)
@@ -1079,6 +1337,7 @@ def _standards_manifest_build_command(args: argparse.Namespace) -> int:
 
 
 def _standards_monitor_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     report = monitor_standard_sources(
         args.manifest,
         args.output,
@@ -1091,6 +1350,7 @@ def _standards_monitor_command(args: argparse.Namespace) -> int:
 
 
 def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     receipt = verify_standards_monitor_report(
         args.report,
         args.public_key,
@@ -1101,6 +1361,7 @@ def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
 
 
 def _release_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("release-check --overwrite requires --output")
     result = assess_release_readiness(
@@ -1152,6 +1413,7 @@ def _release_check_command(args: argparse.Namespace) -> int:
 
 
 def _evidence_draft_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("evidence-draft --overwrite requires --output")
     result = build_governance_evidence_draft(args.report)
@@ -1178,6 +1440,7 @@ def _evidence_draft_command(args: argparse.Namespace) -> int:
 
 
 def _promotion_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("promotion-plan --overwrite requires --output")
     result = build_promotion_plan(
@@ -1216,6 +1479,7 @@ def _promotion_plan_command(args: argparse.Namespace) -> int:
 
 
 def _closure_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("closure-plan --overwrite requires --output")
     result = build_closure_plan(
@@ -1249,6 +1513,7 @@ def _closure_plan_command(args: argparse.Namespace) -> int:
 
 
 def _compare_builds_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("compare-builds --overwrite requires --output")
     result = compare_builds(
@@ -1287,6 +1552,7 @@ def _compare_builds_command(args: argparse.Namespace) -> int:
 
 
 def _normalize_sdist_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = normalize_sdist(
         args.source,
         args.output,
@@ -1304,6 +1570,7 @@ def _normalize_sdist_command(args: argparse.Namespace) -> int:
 
 
 def _baseline_candidate_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("baseline-candidate --overwrite requires --output")
     result = build_baseline_candidate(args.report)
@@ -1325,6 +1592,7 @@ def _baseline_candidate_command(args: argparse.Namespace) -> int:
 
 
 def _trend_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("trend --overwrite requires --output")
     result = build_operational_trend(
@@ -1358,6 +1626,7 @@ def _trend_command(args: argparse.Namespace) -> int:
 
 
 def _release_manifest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("release-manifest --overwrite requires --output")
     evidence = tuple(_parse_evidence_argument(value) for value in args.evidence)
@@ -1384,6 +1653,7 @@ def _release_manifest_command(args: argparse.Namespace) -> int:
 
 
 def _verify_release_manifest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-release-manifest --overwrite requires --output")
     result = verify_release_evidence_manifest(
@@ -1413,6 +1683,7 @@ def _verify_release_manifest_command(args: argparse.Namespace) -> int:
 
 
 def _policy_simulation_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("policy-simulate --overwrite requires --output")
     result = simulate_policy(
@@ -1440,6 +1711,7 @@ def _policy_simulation_command(args: argparse.Namespace) -> int:
 
 
 def _finding_register_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("finding-register --overwrite requires --output")
     result = build_finding_register(
@@ -1463,6 +1735,7 @@ def _finding_register_command(args: argparse.Namespace) -> int:
 
 
 def _github_annotations_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("github-annotations --overwrite requires --output")
     result = build_github_annotations(
@@ -1486,6 +1759,7 @@ def _github_annotations_command(args: argparse.Namespace) -> int:
 
 
 def _audit_package_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = create_audit_package(
         args.report,
         args.output,
@@ -1501,6 +1775,7 @@ def _audit_package_command(args: argparse.Namespace) -> int:
 
 
 def _verify_audit_package_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-audit-package --overwrite requires --output")
     result = verify_audit_package(args.package, package_sha256=args.package_sha256)
@@ -1521,6 +1796,7 @@ def _verify_audit_package_command(args: argparse.Namespace) -> int:
 
 
 def _merge_coverage_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = merge_coverage_scenarios(
         tuple(_parse_evidence_argument(value) for value in args.scenario)
     )
@@ -1538,6 +1814,7 @@ def _merge_coverage_command(args: argparse.Namespace) -> int:
 
 
 def _portfolio_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("portfolio --overwrite requires --output")
     result = build_portfolio_dashboard(list(args.reports))
@@ -1559,6 +1836,7 @@ def _portfolio_command(args: argparse.Namespace) -> int:
 
 
 def _config_provenance_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("config-provenance --overwrite requires --output")
     result = build_config_provenance(
@@ -1586,6 +1864,7 @@ def _config_provenance_command(args: argparse.Namespace) -> int:
 
 
 def _audience_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("audience-report --overwrite requires --output")
     result = build_audience_report(
@@ -1616,6 +1895,7 @@ def _audience_report_command(args: argparse.Namespace) -> int:
 
 
 def _evidence_pack_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = create_evidence_pack(
         args.report,
         args.output,
@@ -1657,6 +1937,7 @@ def _evidence_pack_command(args: argparse.Namespace) -> int:
 
 
 def _verify_evidence_pack_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-evidence-pack --overwrite requires --output")
     result = verify_evidence_pack(
@@ -1722,6 +2003,7 @@ def _metric_text(value: object) -> str:
 
 def _verify_report_command(args: argparse.Namespace) -> int:
     """Verify a sealed report and optionally publish its portable receipt."""
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-report --overwrite requires --output")
     if args.output and args.format != "json":
@@ -1750,6 +2032,7 @@ def _verify_report_command(args: argparse.Namespace) -> int:
 
 def _list_tools_command(args: argparse.Namespace) -> int:
     """Render the configured profile-to-tool inventory."""
+    _load_command_dependencies()
     profiles = (
         {args.profile: PROFILE_TOOLS[args.profile]} if args.profile else PROFILE_TOOLS
     )
@@ -1765,6 +2048,7 @@ def _emit_cli_error(
     args: argparse.Namespace,
     exc: ConfigurationError | OSError | TypeError | ValueError,
 ) -> None:
+    _load_command_dependencies()
     message = sanitize_terminal_text(str(exc))
     if getattr(exc, "__notes__", None):
         message += "\n" + sanitize_terminal_text("\n".join(exc.__notes__))
@@ -1793,6 +2077,7 @@ def _emit_cli_error(
 
 
 def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:
+    _load_command_dependencies()
     output = resolve_unlinked_path(output, "report output")
     _validate_output_scope(target, output)
     _validate_existing_output(output, overwrite)
@@ -1831,6 +2116,7 @@ def _validate_existing_output(output: Path, overwrite: bool) -> None:
 
 
 def _is_suite_report(marker: Path) -> bool:
+    _load_command_dependencies()
     if marker.name != "scan-manifest.json" or not marker.is_file():
         return False
     return is_complete_report(marker.parent)
@@ -1869,6 +2155,7 @@ def _write_atomic_output(
     forbidden_root: Path | None = None,
 ) -> Path:
     """Publish text atomically after link and replacement safety checks."""
+    _load_command_dependencies()
     requested = output.expanduser().absolute()
     anchor = Path(requested.anchor)
     destination = resolve_unlinked_path(
