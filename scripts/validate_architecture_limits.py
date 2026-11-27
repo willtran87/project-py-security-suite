@@ -29,7 +29,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/artifact_validation.py": 2_405,
     "src/py_security_suite/benchmark_execution.py": 2_432,
     "src/py_security_suite/benchmark_adapters.py": 3_130,
-    "src/py_security_suite/cli.py": 2_877,
+    "src/py_security_suite/cli.py": 1_953,
     "src/py_security_suite/closure_plan.py": 3_043,
     "src/py_security_suite/config.py": 2_532,
     "src/py_security_suite/execution.py": 1_148,
@@ -46,7 +46,6 @@ _FUNCTION_LINE_LIMITS = {
     ): 490,
     ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 523,
     ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 421,
-    ("src/py_security_suite/cli.py", "build_parser"): 917,
     ("src/py_security_suite/config.py", "_default_mapping"): 627,
     (
         "src/py_security_suite/cli_benchmark_arguments.py",

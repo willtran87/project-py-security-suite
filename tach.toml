@@ -103,7 +103,7 @@ depends_on = ["py_security_suite.path_safety"]
 
 [[modules]]
 path = "py_security_suite.audience_report"
-depends_on = ["py_security_suite.strict_json", "py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety"]
+depends_on = ["py_security_suite.strict_json", "py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety", "py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.audit_package"
@@ -123,7 +123,7 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_assur
 
 [[modules]]
 path = "py_security_suite.benchmark_assurance"
-depends_on = ["py_security_suite.path_safety", "py_security_suite.atomic_file", "py_security_suite.strict_json", "py_security_suite.benchmark_signing"]
+depends_on = ["py_security_suite.path_safety", "py_security_suite.atomic_file", "py_security_suite.strict_json", "py_security_suite.benchmark_signing", "py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.benchmark_compiler"
@@ -211,7 +211,7 @@ depends_on = ["py_security_suite.config", "py_security_suite.scaffold_safety"]
 
 [[modules]]
 path = "py_security_suite.cli"
-depends_on = ["py_security_suite.precommit_config", "py_security_suite.assurance_catalog", "py_security_suite.version", "py_security_suite.coverage_merge", "py_security_suite.evidence_draft", "py_security_suite.reproducibility", "py_security_suite.reachability", "py_security_suite.policy", "py_security_suite.trusted_observation", "py_security_suite.benchmark_assurance", "py_security_suite.finding_register", "py_security_suite.release_readiness", "py_security_suite.promotion", "py_security_suite.path_safety", "py_security_suite.benchmark_runtime", "py_security_suite.adapter_conformance", "py_security_suite.closure_plan", "py_security_suite.release_manifest", "py_security_suite.operational_trend", "py_security_suite.audience_report", "py_security_suite.ci_workflow", "py_security_suite.config", "py_security_suite.config_provenance", "py_security_suite.portfolio_dashboard", "py_security_suite.benchmark_adapters", "py_security_suite.provisioning", "py_security_suite.reports", "py_security_suite.github_annotations", "py_security_suite.cli_benchmark_arguments", "py_security_suite.release_payload", "py_security_suite.evidence_pack", "py_security_suite.bundle_qualification", "py_security_suite.native_bundle", "py_security_suite.benchmark_compiler", "py_security_suite.advanced_delta", "py_security_suite.report_retention", "py_security_suite.audit_package", "py_security_suite.benchmark_execution", "py_security_suite.benchmark_telemetry", "py_security_suite.execution", "py_security_suite.baseline_candidate", "py_security_suite.confidential_archive", "py_security_suite.effectiveness_corpus", "py_security_suite.report_inspection", "py_security_suite.standards_monitor", "py_security_suite.benchmark_signing", "py_security_suite.project_init", "py_security_suite.cli_release_arguments", "py_security_suite.reachability_delta", "py_security_suite.config_advisor", "py_security_suite.policy_simulation", "py_security_suite.passport", "py_security_suite.orchestrator", "py_security_suite.doctor", "py_security_suite.cli_scan", "py_security_suite.scan_control", "py_security_suite.cli_recovery"]
+depends_on = ["py_security_suite.precommit_config", "py_security_suite.assurance_catalog", "py_security_suite.coverage_merge", "py_security_suite.evidence_draft", "py_security_suite.reproducibility", "py_security_suite.reachability", "py_security_suite.policy", "py_security_suite.trusted_observation", "py_security_suite.finding_register", "py_security_suite.release_readiness", "py_security_suite.promotion", "py_security_suite.path_safety", "py_security_suite.benchmark_runtime", "py_security_suite.adapter_conformance", "py_security_suite.closure_plan", "py_security_suite.release_manifest", "py_security_suite.operational_trend", "py_security_suite.audience_report", "py_security_suite.ci_workflow", "py_security_suite.config", "py_security_suite.config_provenance", "py_security_suite.portfolio_dashboard", "py_security_suite.benchmark_adapters", "py_security_suite.provisioning", "py_security_suite.reports", "py_security_suite.github_annotations", "py_security_suite.release_payload", "py_security_suite.evidence_pack", "py_security_suite.bundle_qualification", "py_security_suite.native_bundle", "py_security_suite.benchmark_compiler", "py_security_suite.advanced_delta", "py_security_suite.report_retention", "py_security_suite.audit_package", "py_security_suite.benchmark_execution", "py_security_suite.benchmark_telemetry", "py_security_suite.execution", "py_security_suite.baseline_candidate", "py_security_suite.confidential_archive", "py_security_suite.effectiveness_corpus", "py_security_suite.report_inspection", "py_security_suite.standards_monitor", "py_security_suite.benchmark_signing", "py_security_suite.project_init", "py_security_suite.reachability_delta", "py_security_suite.config_advisor", "py_security_suite.policy_simulation", "py_security_suite.passport", "py_security_suite.orchestrator", "py_security_suite.doctor", "py_security_suite.cli_scan", "py_security_suite.scan_control", "py_security_suite.cli_recovery", "py_security_suite.cli_parser"]
 
 [[modules]]
 path = "py_security_suite.cli_benchmark_arguments"
@@ -235,7 +235,7 @@ depends_on = ["py_security_suite.trusted_time", "py_security_suite.path_safety",
 
 [[modules]]
 path = "py_security_suite.config"
-depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers", "py_security_suite.config_policy_floor"]
+depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers", "py_security_suite.config_policy_floor", "py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.config_advisor"
@@ -499,7 +499,7 @@ depends_on = []
 
 [[modules]]
 path = "py_security_suite.project_init"
-depends_on = ["py_security_suite.config"]
+depends_on = ["py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.promotion"
@@ -535,7 +535,7 @@ depends_on = ["py_security_suite.passport", "py_security_suite.trusted_observati
 
 [[modules]]
 path = "py_security_suite.report_inspection"
-depends_on = ["py_security_suite.models", "py_security_suite.execution", "py_security_suite.passport", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.strict_json"]
+depends_on = ["py_security_suite.models", "py_security_suite.execution", "py_security_suite.passport", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.strict_json", "py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.report_retention"
@@ -779,7 +779,7 @@ depends_on = ["py_security_suite.path_safety"]
 
 [[modules]]
 path = "py_security_suite.cli_scan"
-depends_on = ["py_security_suite.config", "py_security_suite.scan_control"]
+depends_on = [ "py_security_suite.scan_control", "py_security_suite"]
 
 [[modules]]
 path = "py_security_suite.artifact_schema_catalog"
@@ -848,3 +848,7 @@ depends_on = ["py_security_suite.path_safety", "py_security_suite.strict_json"]
 [[modules]]
 path = "py_security_suite.evidence_values"
 depends_on = []
+
+[[modules]]
+path = "py_security_suite.cli_parser"
+depends_on = ["py_security_suite.project_init", "py_security_suite.cli_recovery", "py_security_suite.benchmark_assurance", "py_security_suite.audience_report", "py_security_suite.cli_benchmark_arguments", "py_security_suite.cli_release_arguments", "py_security_suite.cli_scan", "py_security_suite.config", "py_security_suite.report_inspection", "py_security_suite.version"]
