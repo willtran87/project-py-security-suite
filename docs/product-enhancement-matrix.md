@@ -1,7 +1,5 @@
 # Product enhancement matrix
 
-Last reviewed: 2026-08-27
-
 The latest findings-driven 89-item backlog is resolved in the
 [closure register](findings-closure.md), including conditional activation and
 external-authority boundaries.

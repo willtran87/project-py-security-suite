@@ -1,7 +1,5 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-31
-
 ## Scan budgets and strict numeric settings
 
 Execution limits use TOML integers. Booleans, quoted numbers, and fractional

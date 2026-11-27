@@ -1,5 +1,55 @@
 # Changelog
 
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) for published
+releases. Add new entries under `## [Unreleased]` using the `Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed`, and `Security` subsections; the release
+runbook ([docs/release-runbook.md](docs/release-runbook.md)) moves them under a
+versioned heading when a release is tagged.
+
+## [Unreleased]
+
+### Added
+
+- Apache-2.0 `LICENSE` with PEP 639 `license`/`license-files` metadata in the
+  wheel and sdist.
+- Scheduled weekly (and manually dispatchable) dependency audit of the root and
+  companion locks on `main`.
+- `check-manifest` and a strict distribution-metadata check in the CI quality
+  job, plus a release runbook describing the six-stage release chain.
+- Generated README count markers validated by
+  `scripts/validate_documentation_metrics.py`.
+
+### Changed
+
+- The sdist no longer ships the test suite; run tests from a repository
+  checkout.
+- The scanner image installs the suite from a wheel built with a hash-locked
+  build backend instead of running source through `PYTHONPATH`.
+- Pin the `setuptools` build backend exactly and widen over-tight runtime
+  upper bounds (`cryptography`, `pefile`, `pyelftools`, `wasmtime`, tree-sitter
+  grammars); `uv.lock` remains the reproducibility source.
+- Dependabot tracks the uv lock files and the scanner base image.
+- CI cancels only superseded pull request runs; release-path jobs run on pinned
+  `ubuntu-24.04` images.
+- PyPI publishing verifies the source release run's event, ref and `main`
+  ancestry in a job without OIDC permissions; a separate job holding only
+  `id-token: write` publishes the verified artifacts.
+- Rename hyphenated Python scripts to importable snake_case modules.
+- Bump Semgrep in the scanner image to 1.187.0.
+
+### Removed
+
+- Unused `security/api-surface-1.0.json` baseline and
+  `scripts/prepare-intelligence-snapshots.ps1`.
+- Hand-maintained "Last reviewed" dates in the documentation; use the Git
+  history of each page instead.
+
+### Security
+
 - **SARIF output contract change.** `results.sarif` rule descriptors are now
   keyed by scanner rule and severity (`<tool>/<rule>/<severity>`), so GitHub
   shows each alert at its own security severity instead of the first finding's.
@@ -40,6 +90,15 @@
   production/release, `--diagnostic-without-isolation` always yields
   `INCOMPLETE`, `incomplete_is_blocking = false` is rejected, and boolean
   settings must be TOML booleans.
+
+## Pre-release development history
+
+No version has been tagged or published yet. The entries below are the
+unversioned development log recorded before this changelog adopted the Keep a
+Changelog format. They are preserved verbatim, newest first, and are not
+grouped by release.
+
+### Development log
 
 - Isolate validator and child-process bytecode caches, rejecting stale reports and
   preserving exact wheel receipts and report bytes in unique archives.
@@ -825,10 +884,7 @@
   site with pinned workflow actions, exact direct build dependencies, dark-mode
   support, Mermaid diagrams, source links, and deployment-safe navigation.
 
-All notable changes are documented here. The project follows semantic versioning
-for published releases.
-
-## Unreleased
+### Initial pre-release notes
 
 - Gate scanner launch on successful OS quota assignment; add active isolation
   canaries, Windows held-handle path traversal, mTLS monotonic governance replay
@@ -1665,7 +1721,7 @@ for published releases.
 - Decomposed HTML report assembly from Radon rank D to rank A while preserving
   the offline single-file artifact and strict content-security policy.
 
-### Added
+#### Added
 
 - Offline-first orchestration for 62 governed security, supply-chain, quality,
   architecture, test-assurance, repository-health, and artifact perspectives.
@@ -1678,7 +1734,7 @@ for published releases.
 - Complete source distributions containing governance, schemas, operational
   scripts, examples, locked companion metadata, and test sources.
 
-### Security
+#### Security
 
 - Target and scanner before/after integrity checks, bounded output and parsing,
   path and symlink defenses, sanitized diagnostics, secret-context redaction,
@@ -1688,7 +1744,7 @@ for published releases.
 - Security Passport publication is failure-atomic: signing failures preserve
   existing evidence and discard incomplete staging directories.
 
-### Performance
+#### Performance
 
 - Maintained-file discovery prunes generated and tool-owned directories before
   traversal, materially reducing comprehensive preflight and scan duration.
@@ -1700,3 +1756,5 @@ for published releases.
   only authenticated source-bound companion evidence with control proofs. The
   proposal validator never authorizes execution, and confirmed defects require
   an exact binding to the failed control-ledger case.
+
+[Unreleased]: https://github.com/willtran87/project-py-security-suite/commits/main

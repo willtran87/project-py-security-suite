@@ -1,7 +1,5 @@
 # Cross-tool evidence fusion
 
-Last reviewed: 2026-08-13
-
 The suite cross-references independent scanner and evidence outputs into
 `evidence-fusion.json`. Fusion improves review order and explanatory context;
 it never silently changes native severity, suppresses a finding, or treats an

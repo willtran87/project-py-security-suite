@@ -14,6 +14,11 @@ max_output_bytes = 33554432
 required_scanners = ["bandit", "semgrep", "detect-secrets", "osv-scanner"]
 block_severities = ["critical", "high"]
 incomplete_is_blocking = true
+# Governed acceptance of exactly the eight Semgrep-pinned scanner-image
+# advisories (mcp, opentelemetry-api, wcmatch); expires 2027-01-26. See
+# docs/compatibility-matrix.md. Any edit to the ledger must update this digest.
+risk_acceptance_path = "/workspace/security/self-scan-risk-acceptances.json"
+risk_acceptance_sha256 = "7d6a7f8ba0d6f5a964e5b1ce780579b30adf553de1f16dca29330a5b4d17e7e3" # pragma: allowlist secret - public ledger checksum
 
 [reports]
 include_sanitized_evidence = true
@@ -27,7 +32,7 @@ timeout_seconds = 300
 enabled = true
 executable = "/usr/local/bin/semgrep"
 timeout_seconds = 600
-rules_path = "/opt/pysec-suite/src/py_security_suite/rules/python-security.yml"
+rules_path = "/opt/pysec-suite/rules/python-security.yml"
 
 [tools.detect-secrets]
 rules_path = "/workspace/security/self-scan-public-digests.json"

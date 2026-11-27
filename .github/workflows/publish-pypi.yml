@@ -31,16 +31,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify-and-publish:
-    name: Verify and publish exact artifacts
-    environment: pypi-production
+  verify:
+    name: Verify exact release artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Verification executes repository code, so it deliberately holds no
+    # OIDC token permission. Only the publish job below can mint a PyPI token.
     permissions:
       actions: read # Read and download the approved release workflow run.
       attestations: read # Verify provenance for both release subjects.
       contents: read
-      id-token: write # Authenticate to PyPI through Trusted Publishing.
     outputs:
       project: ${{ steps.identity.outputs.project }}
       version: ${{ steps.identity.outputs.version }}
@@ -67,6 +67,12 @@ jobs:
           ref: ${{ inputs.expected_head_sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Require the release commit to be on protected main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null
+          git merge-base --is-ancestor "$EXPECTED_HEAD_SHA" refs/remotes/origin/main
       - name: Verify the referenced release run and download artifacts
         shell: bash
         run: |
@@ -76,11 +82,18 @@ jobs:
           [[ "$(jq -r .conclusion <<< "$run")" == "success" ]]
           [[ "$(jq -r .path <<< "$run")" == ".github/workflows/release-assurance.yml" ]]
           [[ "$(jq -r .run_attempt <<< "$run")" == "1" ]]
+          [[ "$(jq -r .head_repository.full_name <<< "$run")" == "$GITHUB_REPOSITORY" ]]
+          # Only a push of protected main or of a v* release tag may publish;
+          # manually dispatched or pull-request assurance runs are rejected.
+          [[ "$(jq -r .event <<< "$run")" == "push" ]]
+          release_ref="$(jq -r .head_branch <<< "$run")"
+          [[ "$release_ref" == "main" || "$release_ref" =~ ^v[0-9][0-9A-Za-z.+-]*$ ]]
           independent="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$INDEPENDENT_RUN_ID")"
           [[ "$(jq -r .head_sha <<< "$independent")" == "$EXPECTED_HEAD_SHA" ]]
           [[ "$(jq -r .conclusion <<< "$independent")" == "success" ]]
           [[ "$(jq -r .path <<< "$independent")" == ".github/workflows/external-release-verification.yml" ]]
           [[ "$(jq -r .run_attempt <<< "$independent")" == "1" ]]
+          [[ "$(jq -r .event <<< "$independent")" == "workflow_dispatch" ]]
           mkdir -p .artifacts/download packages
           gh run download "$RELEASE_RUN_ID" --name release-artifacts --dir .artifacts/download
           gh run download "$INDEPENDENT_RUN_ID" \
@@ -118,6 +131,43 @@ jobs:
           set -euo pipefail
           echo "project=$(jq -r .artifacts.wheel.project .artifacts/publish-verification.json)" >> "$GITHUB_OUTPUT"
           echo "version=$(jq -r .artifacts.wheel.version .artifacts/publish-verification.json)" >> "$GITHUB_OUTPUT"
+      - name: Hand off only the verified distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pypi-verified-packages-${{ github.run_id }}
+          path: packages/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish verified artifacts
+    needs: verify
+    environment: pypi-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # No checkout and no repository code: this job only downloads the verified
+    # hand-off, re-checks the approved digests, and publishes.
+    permissions:
+      id-token: write # Authenticate to PyPI through Trusted Publishing.
+    env:
+      EXPECTED_WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+      EXPECTED_SDIST_SHA256: ${{ inputs.sdist_sha256 }}
+    steps:
+      - name: Download the verified distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pypi-verified-packages-${{ github.run_id }}
+          path: packages
+      - name: Re-check approved digests before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find packages -mindepth 1)
+          [[ "${#files[@]}" == 2 ]]
+          wheel="$(find packages -maxdepth 1 -type f -name '*.whl')"
+          sdist="$(find packages -maxdepth 1 -type f -name '*.tar.gz')"
+          [[ "$(sha256sum "$wheel" | cut -d' ' -f1)" == "$EXPECTED_WHEEL_SHA256" ]]
+          [[ "$(sha256sum "$sdist" | cut -d' ' -f1)" == "$EXPECTED_SDIST_SHA256" ]]
       - name: Publish with PyPI Trusted Publishing
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
@@ -129,14 +179,14 @@ jobs:
 
   post-publish-roundtrip:
     name: Verify the public PyPI round trip
-    needs: verify-and-publish
+    needs: [verify, publish]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
     env:
-      PROJECT: ${{ needs.verify-and-publish.outputs.project }}
-      VERSION: ${{ needs.verify-and-publish.outputs.version }}
+      PROJECT: ${{ needs.verify.outputs.project }}
+      VERSION: ${{ needs.verify.outputs.version }}
       EXPECTED_WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
       EXPECTED_SDIST_SHA256: ${{ inputs.sdist_sha256 }}
     steps:

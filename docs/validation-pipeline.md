@@ -1,7 +1,5 @@
 # Validation pipeline and evidence boundaries
 
-Last reviewed: 2026-09-22
-
 Native detector regressions, measured accuracy and production approval are separate
 decisions. The [acceptance record](professional-acceptance.md) records completed
 local measurements and remaining gaps. The public benchmark is development data;

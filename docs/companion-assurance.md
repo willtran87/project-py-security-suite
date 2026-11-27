@@ -1,7 +1,5 @@
 # Offline companion assurance lanes
 
-Last reviewed: 2026-08-27
-
 The scanner process never imports or executes target application code. Tools
 that run tests, symbolic execution, fuzzers, a local service, build steps, or
 artifact verification execute in disposable companion lanes. Only bounded

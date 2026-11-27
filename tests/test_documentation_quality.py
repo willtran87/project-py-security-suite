@@ -6,8 +6,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import unquote
 
-from py_security_suite.assurance_catalog import export_assurance_catalog
-from py_security_suite.config import PROFILE_TOOLS, SUPPORTED_TOOLS
+from py_security_suite.config import PROFILE_TOOLS
 
 _ROOT = Path(__file__).resolve().parents[1]
 _LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -44,23 +43,10 @@ class DocumentationQualityTests(unittest.TestCase):
                     failures.append(str(document.relative_to(_ROOT)))
         self.assertEqual(failures, [], "invalid Mermaid fences: " + ", ".join(failures))
 
-    def test_documented_portfolio_count_matches_registry(self) -> None:
-        expected = len(SUPPORTED_TOOLS)
-        documents = (_ROOT / "README.md", _ROOT / "docs" / "design.md")
-        for document in documents:
-            text = document.read_text(encoding="utf-8")
-            counts = {
-                int(value) for value in re.findall(r"\b(\d+) governed adapters\b", text)
-            }
-            self.assertEqual(
-                counts,
-                {expected},
-                f"{document.relative_to(_ROOT)} has a stale adapter count",
-            )
-
     def test_documented_profile_snapshot_matches_configuration(self) -> None:
         index = (_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
-        self.assertIn(f"{len(PROFILE_TOOLS)} profiles", index)
+        # Profile and catalog counts are enforced by
+        # scripts/validate_documentation_metrics.py (tests/test_documentation_metrics.py).
         for profile in ("comprehensive", "release", "production", "audit"):
             self.assertIn(
                 f"`{profile}`"
@@ -70,42 +56,7 @@ class DocumentationQualityTests(unittest.TestCase):
             )
             self.assertIn(str(len(PROFILE_TOOLS[profile])), index)
 
-    def test_industry_catalog_counts_and_new_domains_are_documented(self) -> None:
-        counts = export_assurance_catalog()["counts"]
-        expectations = {
-            _ROOT / "README.md": (
-                f"{counts['standards']} versioned references",
-                f"{counts['standards_watchlist']} quarantined watch items",
-                f"{counts['profiles']} selectable profiles",
-                f"{counts['benchmarks']} governed benchmark families",
-                f"{counts['adapter_specs']} maintained adapters",
-                f"{counts['execution_contracts']} maintained benchmark adapters",
-            ),
-            _ROOT / "docs" / "design.md": (
-                f"{counts['standards']} versioned standards references",
-                f"{counts['profiles']} assurance packs",
-                f"{counts['benchmarks']} governed benchmark families",
-                f"{counts['adapter_specs']} maintained adapters",
-            ),
-            _ROOT / "docs" / "index.md": (
-                f"{counts['standards']} standards references",
-                f"{counts['standards_watchlist']} quarantined watch items",
-                f"{counts['profiles']} assurance packs",
-                f"{counts['benchmarks']} benchmark families",
-                f"{counts['adapter_specs']} maintained adapters",
-            ),
-            _ROOT / "docs" / "industry-standards-benchmarks.md": (
-                f"{counts['standards']} version-explicit references",
-                f"{counts['standards_watchlist']} non-normative watch items",
-                f"{counts['profiles']} built-in packs",
-                f"{counts['adapter_specs']}-adapter catalog",
-            ),
-        }
-        for path, phrases in expectations.items():
-            content = path.read_text(encoding="utf-8")
-            for phrase in phrases:
-                self.assertIn(phrase, content, f"{path.relative_to(_ROOT)} is stale")
-
+    def test_industry_catalog_new_domains_are_documented(self) -> None:
         profiles = {
             "ransomware-resilience",
             "media-sanitization",

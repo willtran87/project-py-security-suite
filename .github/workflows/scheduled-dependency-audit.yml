@@ -1,0 +1,68 @@
+name: Scheduled dependency audit
+
+# Newly published advisories against already-locked dependencies should fail
+# main once, on a schedule, instead of surfacing first as unrelated pull
+# request failures.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: scheduled-dependency-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit locked dependencies ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+        python-version: ["3.11", "3.13", "3.14"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked audit dependencies
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Audit root and companion lock exports
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_requirements() {
+            local requirements="$1"
+            for attempt in 1 2 3; do
+              if uv run --frozen pip-audit \
+                --requirement "$requirements" \
+                --disable-pip --strict --progress-spinner off; then
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                return 1
+              fi
+              sleep $((attempt * 5))
+            done
+          }
+          uv export --quiet --frozen --all-groups --no-emit-project \
+            --output-file "$RUNNER_TEMP/requirements-audit.txt"
+          audit_requirements "$RUNNER_TEMP/requirements-audit.txt"
+          uv export --project companion --quiet --frozen --all-groups \
+            --no-emit-project --no-emit-local \
+            --output-file "$RUNNER_TEMP/companion-requirements-audit.txt"
+          audit_requirements "$RUNNER_TEMP/companion-requirements-audit.txt"

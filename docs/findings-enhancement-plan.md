@@ -1,7 +1,5 @@
 # Findings-derived enhancement plan
 
-Last reviewed: 2026-08-10
-
 This register maps the latest 52 enhancement recommendations to executable
 product evidence. **Implemented** means the repository contains a tested local
 control. **Conditional** means the adapter, evidence contract, activation rule,

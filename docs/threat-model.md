@@ -1,7 +1,5 @@
 # Suite threat model
 
-Last reviewed: 2026-08-30
-
 The suite analyzes untrusted repositories with locally installed scanners and
 normalizes their output into sealed evidence. Its primary security objective is
 to prevent a compromised repository, scanner, database, or report artifact from

@@ -4,7 +4,7 @@ param(
     [string]$Python = "",
     [switch]$Force,
     [string]$BanditVersion = "1.9.4",
-    [string]$SemgrepVersion = "1.175.0",
+    [string]$SemgrepVersion = "1.187.0",
     [string]$DetectSecretsVersion = "1.5.0",
     [string]$DefusedXmlVersion = "0.7.1",
     [string]$RuffVersion = "0.15.22",
@@ -479,7 +479,7 @@ $actualDatabaseHash = (
 if ($actualDatabaseHash -ne $OsvDatabaseSha256.ToLowerInvariant()) {
     throw "PyPI OSV database checksum mismatch: $actualDatabaseHash"
 }
-$databaseValidator = Join-Path $PSScriptRoot "validate-osv-snapshot.py"
+$databaseValidator = Join-Path $PSScriptRoot "validate_osv_snapshot.py"
 $databaseSummaryJson = & $Python $databaseValidator $databaseArchive `
     --expected-sha256 $actualDatabaseHash
 if ($LASTEXITCODE -ne 0 -or -not $databaseSummaryJson) {

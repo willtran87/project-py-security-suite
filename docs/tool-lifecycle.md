@@ -1,7 +1,5 @@
 # Scanner bundle lifecycle
 
-Last reviewed: 2026-08-08
-
 The [compatibility matrix](compatibility-matrix.md) describes every adapter and
 its coverage. This document governs how the executable bundle stays trustworthy.
 

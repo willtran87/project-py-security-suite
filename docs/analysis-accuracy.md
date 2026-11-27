@@ -1,7 +1,5 @@
 # Finding accuracy and architecture context
 
-Last reviewed: 2026-08-27
-
 The suite keeps severity, lifecycle, and validation independent. Severity
 describes potential impact; lifecycle describes whether a stable finding is new,
 existing, regressed, resolved, or governed; validation describes the strongest

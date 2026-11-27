@@ -67,6 +67,7 @@ nav:
       - Production security: production-security.md
       - Benchmark trust operations: benchmark-operations.md
       - Companion assurance: companion-assurance.md
+      - Release runbook: release-runbook.md
   - Governance:
       - API compatibility: api-compatibility.md
       - Release readiness: release-readiness.md
