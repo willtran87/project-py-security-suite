@@ -259,12 +259,10 @@ class DeepScannerNormalizationTests(unittest.TestCase):
             adapter.parse('{"Results":[1]}', self.root)
 
     def test_trivy_misconfiguration_and_license_edge_cases_are_safe(self) -> None:
-        self.assertEqual(
-            _misconfigurations({"Misconfigurations": {}}, "Dockerfile"), []
-        )
-        self.assertEqual(
-            _misconfigurations({"Misconfigurations": [1]}, "Dockerfile"), []
-        )
+        with self.assertRaisesRegex(TypeError, "Misconfigurations must be a list"):
+            _misconfigurations({"Misconfigurations": {"bad": 1}}, "Dockerfile")
+        with self.assertRaisesRegex(TypeError, "misconfiguration must be an object"):
+            _misconfigurations({"Misconfigurations": [1]}, "Dockerfile")
         misconfiguration = _misconfigurations(
             {
                 "Misconfigurations": [
@@ -282,8 +280,10 @@ class DeepScannerNormalizationTests(unittest.TestCase):
         self.assertIsNone(misconfiguration.citations[0].uri)
         self.assertIsNone(misconfiguration.locations[0].start_line)
 
-        self.assertEqual(_licenses({"Licenses": {}}, "LICENSE", self.root), [])
-        self.assertEqual(_licenses({"Licenses": [1]}, "LICENSE", self.root), [])
+        with self.assertRaisesRegex(TypeError, "Licenses must be a list"):
+            _licenses({"Licenses": {"bad": 1}}, "LICENSE", self.root)
+        with self.assertRaisesRegex(TypeError, "license finding must be an object"):
+            _licenses({"Licenses": [1]}, "LICENSE", self.root)
         self.assertEqual(
             _licenses(
                 {"Licenses": [{"Name": "MIT", "Severity": "LOW"}]},

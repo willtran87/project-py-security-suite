@@ -200,7 +200,7 @@ def _finding(
         rule_properties,
         default_configuration=rule.get("defaultConfiguration", _MISSING),
         rank=result.get("rank", _MISSING),
-        kind=str(result_semantics["kind"]),
+        kind=_severity_kind(str(result_semantics["kind"])),
         configuration_override=configuration_override,
     )
     severity_decision["configuration_override"] = configuration_reference
@@ -1280,6 +1280,11 @@ def _result_semantics(result: dict[str, Any]) -> dict[str, Any]:
             "informational-only; suite policy acceptance is still required"
         ),
     }
+
+
+def _severity_kind(kind: str) -> str:
+    """Grade unknown kinds as failures so they cannot downgrade severity."""
+    return "fail" if kind == "unknown" else kind
 
 
 def _enum_value(value: Any, allowed: dict[str, str], *, default: str) -> str:

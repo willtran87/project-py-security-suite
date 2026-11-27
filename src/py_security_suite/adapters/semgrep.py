@@ -79,6 +79,8 @@ class SemgrepAdapter(ScannerAdapter):
             "--disable-version-check",
             "--strict",
             "--no-git-ignore",
+            # Target-controlled "nosem" comments must not suppress findings.
+            "--disable-nosem",
             f"--jobs={SEMGREP_JOBS}",
             "--exclude",
             ".artifacts",
