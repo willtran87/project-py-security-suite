@@ -13,9 +13,16 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
-from py_security_suite import audit_package, evidence_ingest, native_bundle
+from py_security_suite import (
+    audit_package,
+    bytecode_analysis,
+    evidence_ingest,
+    native_bundle,
+)
 from py_security_suite.adapters import artifacts
 from py_security_suite.adapters.actionlint import ActionlintAdapter
 from py_security_suite.adapters.bandit import BanditAdapter
@@ -536,6 +543,55 @@ class BytecodeLineTests(unittest.TestCase):
         edges = analyze_python_bytecode(payload)
         self.assertIn([3, "module-import", "os"], edges)
         self.assertIn([7, "dynamic-dispatch", "eval"], edges)
+
+    def test_instruction_line_supports_every_python_shape(self) -> None:
+        positions = SimpleNamespace(lineno=9)
+        cases = (
+            (SimpleNamespace(line_number=4, starts_line=True), 4),
+            (SimpleNamespace(line_number=None, positions=positions), 9),
+            (SimpleNamespace(positions=None, starts_line=7), 7),
+            (
+                SimpleNamespace(
+                    positions=SimpleNamespace(lineno=None), starts_line=True
+                ),
+                None,
+            ),
+            (SimpleNamespace(starts_line=None), None),
+        )
+        for instruction, expected in cases:
+            with self.subTest(instruction=instruction):
+                self.assertEqual(
+                    bytecode_analysis._instruction_line(cast(Any, instruction)),
+                    expected,
+                )
+
+    def test_shared_code_objects_are_analyzed_once(self) -> None:
+        inner = compile("import os\n", "inner.py", "exec")
+        outer = compile("pass\n", "outer.py", "exec").replace(co_consts=(inner, inner))
+        payload = importlib.util.MAGIC_NUMBER + b"\x00" * 12 + marshal.dumps(outer)
+        self.assertEqual(analyze_python_bytecode(payload), [[1, "module-import", "os"]])
+
+    def test_limits_and_malformed_payloads_fail_closed(self) -> None:
+        code = compile("import os\nimport sys\n", "fixture.py", "exec")
+        payload = importlib.util.MAGIC_NUMBER + b"\x00" * 12 + marshal.dumps(code)
+        for name, value in (
+            ("_MAX_CODE_OBJECTS", 0),
+            ("_MAX_INSTRUCTIONS", 1),
+            ("_MAX_EDGES", 0),
+        ):
+            with self.subTest(limit=name), patch.object(bytecode_analysis, name, value):
+                with self.assertRaisesRegex(ValueError, "limit exceeded|invalid"):
+                    analyze_python_bytecode(payload)
+        header = importlib.util.MAGIC_NUMBER + b"\x00" * 12
+        for bad in (
+            b"short",
+            b"\x00" * 16 + marshal.dumps(code),
+            header + b"\xff\xff",
+            header + marshal.dumps(42),
+        ):
+            with self.subTest(payload=bad[:20]):
+                with self.assertRaises(ValueError):
+                    analyze_python_bytecode(bad)
 
 
 class JUnitTests(_TemporaryRoot):
