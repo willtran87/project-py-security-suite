@@ -543,7 +543,39 @@ depends_on = ["py_security_suite.trusted_observation", "py_security_suite.truste
 
 [[modules]]
 path = "py_security_suite.reports"
-depends_on = ["py_security_suite.artifact_validation", "py_security_suite.portfolio_health", "py_security_suite.prioritization", "py_security_suite.path_safety", "py_security_suite.admission", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_references", "py_security_suite.report_cleanup", "py_security_suite.report_io", "py_security_suite.report_markdown", "py_security_suite.report_sarif", "py_security_suite.risk_path_report_intro", "py_security_suite.report_acl"]
+depends_on = ["py_security_suite.artifact_validation", "py_security_suite.path_safety", "py_security_suite.models", "py_security_suite.source_context", "py_security_suite.passport", "py_security_suite.report_checkpoint", "py_security_suite.report_cleanup", "py_security_suite.report_io", "py_security_suite.report_acl", "py_security_suite.report_markdown_findings", "py_security_suite.report_common", "py_security_suite.report_html", "py_security_suite.report_assurance_case", "py_security_suite.report_interchange", "py_security_suite.report_risk_path_summary", "py_security_suite.report_summary", "py_security_suite.report_action_plan"]
+
+[[modules]]
+path = "py_security_suite.report_common"
+depends_on = ["py_security_suite.report_references", "py_security_suite.report_markdown", "py_security_suite.models", "py_security_suite.prioritization"]
+
+[[modules]]
+path = "py_security_suite.report_summary"
+depends_on = ["py_security_suite.report_risk_path_summary", "py_security_suite.report_markdown", "py_security_suite.report_markdown_findings", "py_security_suite.models", "py_security_suite.portfolio_health", "py_security_suite.admission", "py_security_suite.report_common"]
+
+[[modules]]
+path = "py_security_suite.report_markdown_findings"
+depends_on = ["py_security_suite.models", "py_security_suite.source_context", "py_security_suite.report_common", "py_security_suite.report_markdown"]
+
+[[modules]]
+path = "py_security_suite.report_risk_path_summary"
+depends_on = ["py_security_suite.risk_path_report_intro", "py_security_suite.report_common", "py_security_suite.report_markdown"]
+
+[[modules]]
+path = "py_security_suite.report_action_plan"
+depends_on = ["py_security_suite.report_common", "py_security_suite.models", "py_security_suite.report_markdown"]
+
+[[modules]]
+path = "py_security_suite.report_assurance_case"
+depends_on = ["py_security_suite.report_markdown", "py_security_suite.models", "py_security_suite.report_common"]
+
+[[modules]]
+path = "py_security_suite.report_html"
+depends_on = ["py_security_suite.report_common", "py_security_suite.models", "py_security_suite.admission", "py_security_suite.portfolio_health", "py_security_suite.report_references"]
+
+[[modules]]
+path = "py_security_suite.report_interchange"
+depends_on = ["py_security_suite.report_markdown", "py_security_suite.report_sarif", "py_security_suite.models", "py_security_suite.report_common"]
 
 [[modules]]
 path = "py_security_suite.repository_file_policy"

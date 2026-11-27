@@ -23,7 +23,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_emerging_assurance_catalog.py": 37,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
     "src/py_security_suite/risk_paths.py": 7_265,
-    "src/py_security_suite/reports.py": 7_498,
+    "src/py_security_suite/reports.py": 380,
     "src/py_security_suite/data_exposure.py": 3_778,
     "src/py_security_suite/evidence_ingest.py": 2_511,
     "src/py_security_suite/artifact_validation.py": 2_405,
@@ -57,7 +57,10 @@ _FUNCTION_LINE_LIMITS = {
         "add_release_check_command",
     ): 64,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 591,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 68,
+    (
+        "src/py_security_suite/report_risk_path_summary.py",
+        "_render_risk_path_summary",
+    ): 68,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 275,
     (
         "src/py_security_suite/semantic_coverage.py",
@@ -73,7 +76,7 @@ _FUNCTION_LINE_LIMITS = {
     ): 352,
     ("src/py_security_suite/industry_assurance.py", "_oscal_documents"): 351,
     ("src/py_security_suite/code_health.py", "analyze_code_health"): 321,
-    ("src/py_security_suite/reports.py", "render_assurance_case"): 316,
+    ("src/py_security_suite/report_assurance_case.py", "render_assurance_case"): 316,
     (
         "src/py_security_suite/benchmark_evidence.py",
         "verify_benchmark_evidence_documents",
@@ -89,7 +92,10 @@ _FUNCTION_LINE_LIMITS = {
 _FUNCTION_DECISION_LIMITS = {
     ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 31,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 135,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 16,
+    (
+        "src/py_security_suite/report_risk_path_summary.py",
+        "_render_risk_path_summary",
+    ): 16,
     ("src/py_security_suite/benchmark_execution.py", "execute_benchmark_manifest"): 58,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 45,
     (
@@ -102,9 +108,12 @@ _FUNCTION_DECISION_LIMITS = {
         "_assurance_case_assessment",
     ): 85,
     ("src/py_security_suite/data_exposure.py", "_sdk_dependency_contexts"): 83,
-    ("src/py_security_suite/reports.py", "_markdown_risk_path_context"): 77,
+    (
+        "src/py_security_suite/report_markdown_findings.py",
+        "_markdown_risk_path_context",
+    ): 77,
     ("src/py_security_suite/data_exposure.py", "apply_data_exposure_fusion"): 80,
-    ("src/py_security_suite/reports.py", "_html_risk_path_context"): 74,
+    ("src/py_security_suite/report_html.py", "_html_risk_path_context"): 74,
     ("src/py_security_suite/industry_assurance.py", "_lifecycle_trace_graph"): 75,
     ("src/py_security_suite/domain_assurance.py", "_domain_signals"): 86,
 }
