@@ -1,7 +1,5 @@
 # Production evaluation work package
 
-Last reviewed: 2026-09-12
-
 The implemented controls support a controlled professional pilot. A general
 production-readiness decision still needs the evidence below. The public OWASP
 Python corpus has guided detector development and must remain classified as

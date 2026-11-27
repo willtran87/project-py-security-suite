@@ -1,7 +1,5 @@
 # Advanced cross-evidence analysis
 
-Last reviewed: 2026-08-13
-
 `advanced-analysis.json` turns retained scanner, route, artifact, threat, test,
 mutation, telemetry, and dependency evidence into typed relationships and
 decision-oriented review records. The analysis is offline, bounded, and does

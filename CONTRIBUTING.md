@@ -15,15 +15,37 @@ model and stable normalized report contract.
 
 ## Local validation
 
-Use approved local dependencies and run:
+Use the locked development environment and run the same core gates as the CI
+`quality` and `test` jobs (see `.github/workflows/ci.yml` for the full list,
+including the additional strict-surface and script type checks):
 
 ```text
-python -m ruff format --check src tests
-python -m ruff check src tests
-python -m mypy src tests
-python -m pytest
+uv sync --locked --all-groups
+uv run --frozen ruff format --check .
+uv run --frozen ruff check .
+uv run --frozen mypy src companion scripts/audit_pages.py
+uv run --frozen mypy --config-file src/py_security_suite/rules/mypy.ini src
+uv run --frozen pyright
+uv run --frozen pytest -n auto
+uv run --frozen python -m scripts.validate_documentation_metrics
+uv run --frozen check-manifest --no-build-isolation
+uv build --no-sources --out-dir .artifacts/quality-dist
+uv run --frozen python scripts/validate_distribution_metadata.py .artifacts/quality-dist
+uv run --frozen zizmor --pedantic --no-progress --color never .github
 pysec doctor . --config APPROVED_CONFIG --profile comprehensive
 ```
+
+Changing `containers/scanner/pyproject.toml` requires regenerating its uv lock
+and both hash-locked exports:
+
+```text
+uv lock --project containers/scanner
+uv export --frozen --project containers/scanner --no-emit-project --no-emit-local --no-header --no-annotate --output-file containers/scanner/requirements.lock
+uv export --frozen --project containers/scanner --only-group build --no-emit-project --no-emit-local --no-header --no-annotate --output-file containers/scanner/build-requirements.lock
+```
+
+Record user-visible changes under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md).
 
 Adapter changes require positive, negative, malformed-output, applicability,
 and unavailable-tool tests. Report changes require Markdown, HTML, SARIF, JSON,

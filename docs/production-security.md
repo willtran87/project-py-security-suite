@@ -1,7 +1,5 @@
 # Production security gate
 
-Last reviewed: 2026-08-31
-
 ## Purpose
 
 The `production` profile is the strict source-security gate for code proposed
@@ -552,7 +550,7 @@ negative fixtures name the exact expected verifier error so a broken trust-root
 or registry setup cannot masquerade as a successful rejection test:
 
 ```text
-uv run --frozen python scripts/validate-native-attestation-fixtures.py \
+uv run --frozen python scripts/validate_native_attestation_fixtures.py \
   security-data/native-attestation-fixtures/manifest.json \
   --manifest-sha256 "$APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256"
 ```
@@ -625,7 +623,7 @@ Run the live authority conformance harness for every configured checkpoint
 authority (and every quorum member) before admission:
 
 ```text
-uv run --frozen python scripts/validate-checkpoint-authority.py \
+uv run --frozen python scripts/validate_checkpoint_authority.py \
   --prefix PYSEC_CHECKPOINT_CONFORMANCE
 ```
 

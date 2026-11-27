@@ -1,5 +1,7 @@
 include CHANGELOG.md
 include CONTRIBUTING.md
+include LICENSE
+include MANIFEST.in
 include README.md
 include SECURITY.md
 include pyproject.toml
@@ -14,8 +16,12 @@ recursive-include docs *.json *.md
 recursive-include examples *.json *.yaml *.yml
 recursive-include scripts *.ps1
 recursive-include scripts *.py
-recursive-include security *.json
+recursive-include security *.json *.toml
 recursive-include src/py_security_suite py.typed
 recursive-include src/py_security_suite/rules *.ini *.json *.psd1 *.toml *.txt *.yaml *.yml
 recursive-include src/py_security_suite/schemas *.json
-recursive-include tests *.py
+# The test suite depends on repository-only fixtures, workflows and model
+# metadata, so it is deliberately not shipped in the sdist. Run tests from a
+# repository checkout instead.
+prune tests
+global-exclude __pycache__ *.py[cod]

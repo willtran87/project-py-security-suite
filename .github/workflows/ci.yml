@@ -16,7 +16,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only superseded pull request runs are cancelled; main and dispatched runs
+  # always complete so post-merge evidence is never truncated.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   product-acceptance:
@@ -538,6 +540,12 @@ jobs:
           diff --strip-trailing-cr \
             containers/scanner/requirements.lock \
             .artifacts/scanner-lock/requirements.lock
+          uv export --frozen --project containers/scanner --only-group build \
+            --no-emit-project --no-emit-local --no-header --no-annotate \
+            --output-file .artifacts/scanner-lock/build-requirements.lock
+          diff --strip-trailing-cr \
+            containers/scanner/build-requirements.lock \
+            .artifacts/scanner-lock/build-requirements.lock
       - name: Validate benchmark schema/runtime consistency
         run: uv run --frozen python scripts/validate_benchmark_schema_consistency.py
       - name: Enforce public CLI and schema compatibility
@@ -590,7 +598,7 @@ jobs:
           scripts/validate_architecture_cycles.py
           scripts/generate_architecture_assurance.py
           scripts/discover_codeql_languages.py scripts/fuzz_security_parsers.py
-          scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
+          scripts/mkdocs_hooks.py scripts/validate_checkpoint_authority.py
           scripts/validate_benchmark_schema_consistency.py
           scripts/validate_security_critical_coverage.py
           scripts/generate_ci_assurance_metrics.py
@@ -604,8 +612,9 @@ jobs:
           scripts/validate_version_consistency.py
           scripts/validate_live_assurance_policy.py
           scripts/validate_live_test_results.py
-          scripts/validate-native-attestation-fixtures.py
+          scripts/validate_native_attestation_fixtures.py
           scripts/verify_release_independent.py
+          scripts/validate_distribution_metadata.py
       - name: Enforce the strict primary type-contract surface
         run: >-
           uv run --frozen mypy
@@ -634,7 +643,13 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Build distributions
-        run: uv build --no-sources
+        run: uv build --no-sources --out-dir .artifacts/quality-dist
+      - name: Require the sdist manifest to match version control
+        run: uv run --frozen check-manifest --no-build-isolation
+      - name: Validate distribution metadata and contents
+        run: >-
+          uv run --frozen python scripts/validate_distribution_metadata.py
+          .artifacts/quality-dist
 
   dependency-audit:
     name: Dependency audit ${{ matrix.os }} / Python ${{ matrix.python-version }}

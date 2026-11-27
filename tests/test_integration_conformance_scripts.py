@@ -1,31 +1,17 @@
 from __future__ import annotations
 
-import importlib.util
 import hashlib
 import json
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
-
-_ROOT = Path(__file__).parent.parent
-
-
-def _load_script(name: str, filename: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, _ROOT / "scripts" / filename)
-    if spec is None or spec.loader is None:
-        raise AssertionError(f"could not load {filename}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from scripts import validate_checkpoint_authority, validate_native_attestation_fixtures
 
 
 def test_checkpoint_authority_conformance_exercises_monotonic_contract(
     monkeypatch: Any,
 ) -> None:
-    module = _load_script(
-        "validate_checkpoint_authority", "validate-checkpoint-authority.py"
-    )
+    module = validate_checkpoint_authority
     current: dict[str, object] = {}
 
     def publish(
@@ -70,10 +56,7 @@ def test_checkpoint_authority_conformance_exercises_monotonic_contract(
 def test_native_attestation_conformance_requires_accept_and_reject_per_format(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    module = _load_script(
-        "validate_native_attestation_fixtures",
-        "validate-native-attestation-fixtures.py",
-    )
+    module = validate_native_attestation_fixtures
     fixtures = []
     formats = ("tpm2-quote", "nitro-attestation", "sev-snp")
     for index, format_name in enumerate(formats):

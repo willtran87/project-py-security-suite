@@ -5,8 +5,6 @@ and the scope of native resource measurements, see the
 [validation pipeline and diagrams](validation-pipeline.md). Completed detector
 measurements and remaining gaps are recorded in [measured acceptance](professional-acceptance.md).
 
-Last reviewed: 2026-08-26
-
 ## Operating model
 
 Scanner acquisition and scanner execution are separate workflows.
@@ -140,7 +138,7 @@ The script refuses unsafe workspace and drive-root destinations.
 
 The upstream OSV `all.zip` endpoint is a rolling database export. The script
 therefore accepts only the explicitly reviewed SHA-256 snapshot embedded in
-the preparation script. `scripts/validate-osv-snapshot.py` then checks bounded
+the preparation script. `scripts/validate_osv_snapshot.py` then checks bounded
 archive/member/record/expanded sizes, safe paths, JSON-only members, CRCs,
 unique advisory IDs, `affected` arrays, and parseable `modified` timestamps.
 It emits a compact validation receipt before the snapshot can enter the bundle.

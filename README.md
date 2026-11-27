@@ -5,6 +5,9 @@ security scanners. It runs locally installed, enterprise-approved tools; turns
 their native JSON into one stable finding model; applies an explicit policy; and
 creates a GitHub-friendly report artifact.
 
+<!-- Counts below are validated by scripts/validate_documentation_metrics.py; regenerate with `python -m scripts.validate_documentation_metrics --write`. -->
+<!-- pysec-readme-metrics adapters=89 standards=663 watchlist=71 profiles=233 benchmarks=282 adapter_specs=212 execution_contracts=212 -->
+
 | Area | Capability |
 |---|---|
 | Portfolio | 89 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence; every scan emits generated selected/applicable/completed capability truth |
@@ -815,8 +818,8 @@ pinned commands, trust roots, failure-domain registry, and policy used by the
 production lane:
 
 ```powershell
-uv run --frozen python scripts/validate-checkpoint-authority.py --prefix PYSEC_CHECKPOINT_CONFORMANCE
-uv run --frozen python scripts/validate-native-attestation-fixtures.py security-data/native-attestation-fixtures/manifest.json --manifest-sha256 $env:APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256
+uv run --frozen python scripts/validate_checkpoint_authority.py --prefix PYSEC_CHECKPOINT_CONFORMANCE
+uv run --frozen python scripts/validate_native_attestation_fixtures.py security-data/native-attestation-fixtures/manifest.json --manifest-sha256 $env:APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256
 ```
 
 The native installer records SHA-256 bindings for installed scanner entry

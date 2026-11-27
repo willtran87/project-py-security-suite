@@ -125,6 +125,86 @@ def test_release_publish_requires_protected_identity_and_public_roundtrip() -> N
     assert "publish-roundtrip/bin/pysec --help" in publish
 
 
+def test_pypi_publish_verifies_without_oidc_and_publishes_without_code() -> None:
+    publish = _workflow("publish-pypi.yml")
+    verify_job = publish[
+        publish.index("\n  verify:\n") : publish.index("\n  publish:\n")
+    ]
+    publish_job = publish[
+        publish.index("\n  publish:\n") : publish.index("\n  post-publish-roundtrip:\n")
+    ]
+
+    assert "id-token" not in verify_job
+    assert "environment: pypi-production" not in verify_job
+    assert '[[ "$(jq -r .event <<< "$run")" == "push" ]]' in verify_job
+    assert '"$release_ref" == "main"' in verify_job
+    assert "^v[0-9]" in verify_job
+    assert (
+        'git merge-base --is-ancestor "$EXPECTED_HEAD_SHA" refs/remotes/origin/main'
+        in verify_job
+    )
+    assert "python -I scripts/verify_release_independent.py" in verify_job
+
+    assert "environment: pypi-production" in publish_job
+    assert "needs: verify" in publish_job
+    permissions = publish_job[publish_job.index("permissions:") :]
+    permissions = permissions[: permissions.index("    env:")]
+    assert re.findall(r"(?m)^      ([a-z-]+):", permissions) == ["id-token"]
+    assert "actions/checkout" not in publish_job
+    assert "python " not in publish_job
+    assert "actions/download-artifact@" in publish_job
+    assert "needs: [verify, publish]" in publish
+
+
+def test_release_path_jobs_use_pinned_runner_images() -> None:
+    for name in (
+        "detection-accuracy.yml",
+        "release-assurance.yml",
+        "release-evidence.yml",
+        "release-promotion.yml",
+        "publish-pypi.yml",
+        "deep-assurance.yml",
+    ):
+        assert "ubuntu-latest" not in _workflow(name), name
+
+
+def test_ci_cancels_only_superseded_pull_request_runs() -> None:
+    workflow = _workflow("ci.yml")
+
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in workflow
+    assert "cancel-in-progress: true" not in workflow
+
+
+def test_scheduled_dependency_audit_covers_root_and_companion_locks() -> None:
+    workflow = _workflow("scheduled-dependency-audit.yml")
+
+    assert "schedule:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "permissions: {}" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "uv run --frozen pip-audit" in workflow
+    assert "uv export --project companion" in workflow
+    for uses in re.findall(r"uses: (\S+)", workflow):
+        assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", uses), uses
+
+
+def test_dependabot_tracks_uv_locks_and_the_scanner_image() -> None:
+    config = (_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    entries = re.findall(
+        r"(?m)^  - package-ecosystem: (\S+)\n    directory: (\S+)$", config
+    )
+
+    assert set(entries) == {
+        ("github-actions", "/"),
+        ("uv", "/"),
+        ("uv", "/companion"),
+        ("uv", "/containers/scanner"),
+        ("docker", "/containers/scanner"),
+        ("pip", "/docs"),
+    }
+    assert config.count("    groups:\n") == len(entries)
+
+
 def test_release_admission_bootstraps_only_from_trusted_main() -> None:
     for name in ("release-evidence.yml", "release-promotion.yml"):
         workflow = _workflow(name)

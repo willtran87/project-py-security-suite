@@ -45,7 +45,19 @@ def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:
     assert "OSV_SCANNER_LINUX_AMD64_SHA256" not in dockerfile
     assert "pip install --require-hashes" in dockerfile
     assert "containers/scanner/requirements.lock" in dockerfile
-    assert "PYTHONPATH=/opt/pysec-suite/src" in dockerfile
+    assert "PYTHONPATH" not in dockerfile
+    assert "AS wheel-builder" in dockerfile
+    assert (
+        "pip install --require-hashes --no-deps -r /build/build-requirements.lock"
+        in (dockerfile)
+    )
+    assert "pip wheel --no-deps --no-build-isolation --no-index" in dockerfile
+    assert "COPY --from=wheel-builder /build/dist/ /opt/pysec-wheel/" in dockerfile
+    assert (
+        "pip install --no-deps --no-index /opt/pysec-wheel/py_security_suite-*.whl"
+        in dockerfile
+    )
+    assert 'importlib.metadata.distribution("py-security-suite")' in dockerfile
     assert '"bomFormat": "CycloneDX"' in dockerfile
     assert '"specVersion": "1.6"' in dockerfile
     assert '"dependencies": dependencies' in dockerfile
@@ -74,6 +86,34 @@ def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:
     assert "chmod 0444 /opt/osv-db/osv-scanner/PyPI/all.zip" in dockerfile
     assert "--user 42424:42424" in build_script
     assert "arbitrary-uid-assets-readable" in build_script
+
+
+def test_scanner_wheel_build_backend_matches_the_project_pin() -> None:
+    project = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    scanner = tomllib.loads(
+        (_ROOT / "containers/scanner/pyproject.toml").read_text(encoding="utf-8")
+    )
+    build_requires = project["build-system"]["requires"]
+
+    assert len(build_requires) == 1
+    assert build_requires[0].startswith("setuptools==")
+    assert scanner["dependency-groups"]["build"] == build_requires
+    lock = (_ROOT / "containers/scanner/build-requirements.lock").read_text(
+        encoding="utf-8"
+    )
+    assert lock.startswith(build_requires[0] + " \\\n")
+    assert "--hash=sha256:" in lock
+
+
+def test_scanner_build_context_excludes_local_interpreter_state() -> None:
+    ignore = (_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    last_negation = max(
+        index for index, line in enumerate(ignore) if line.startswith("!")
+    )
+    trailing = set(ignore[last_negation + 1 :])
+
+    assert {"**/__pycache__", "**/*.egg-info", "**/.venv"} <= trailing
+    assert "!LICENSE" in ignore
 
 
 def test_self_scan_preserves_non_root_host_output_ownership_on_unix() -> None:
@@ -142,6 +182,8 @@ def test_ci_rejects_a_stale_scanner_dependency_export() -> None:
     assert "uv export --frozen --project containers/scanner" in workflow
     assert "--no-emit-local" in workflow
     assert "diff --strip-trailing-cr" in workflow
+    assert "--only-group build" in workflow
+    assert "containers/scanner/build-requirements.lock" in workflow
     assert "recursive-include containers *.lock" in (_ROOT / "MANIFEST.in").read_text(
         encoding="utf-8"
     )

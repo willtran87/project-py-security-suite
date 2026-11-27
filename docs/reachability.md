@@ -1,7 +1,5 @@
 # Python reachability and code islands
 
-Last reviewed: 2026-08-07
-
 The `reachability` scanner maps production Python modules and symbols from
 application entry points without importing or executing target code. It complements
 Vulture's individual dead-code findings, Radon's complexity measurements, and

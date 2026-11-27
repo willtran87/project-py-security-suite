@@ -1,7 +1,5 @@
 # Benchmark trust operations
 
-Last reviewed: 2026-08-31
-
 This runbook covers the deployment-owned controls around enhanced benchmark
 execution. Repository policy cannot authorize receipt signers, trusted-time
 authorities, replay state, or security-event anchors.
