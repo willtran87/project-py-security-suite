@@ -121,13 +121,42 @@ class RequiredScannerUnionTests(unittest.TestCase):
         config.policy.required_scanners = ("semgrep",)
         self.assertEqual(config.required_tools, ("bandit", "detect-secrets", "semgrep"))
 
-    def test_disabling_a_profile_scanner_is_rejected_even_with_narrow_list(
+    def test_disabled_profile_scanner_with_narrow_list_is_incomplete(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "pysec.toml"
             config_path.write_text(
                 '[policy]\nrequired_scanners = ["bandit"]\n'
+                "[tools.semgrep]\nenabled = false\n",
+                encoding="utf-8",
+            )
+            config = load_config(repository_config=config_path)
+        self.assertIn("semgrep", config.required_tools)
+        runs = _completed(tuple(t for t in config.selected_tools if t != "semgrep"))
+        runs.append(
+            ToolRun(
+                tool="semgrep",
+                status=ToolStatus.SKIPPED,
+                command=["semgrep"],
+                duration_seconds=0.0,
+                error="scanner disabled by configuration",
+            )
+        )
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("required scanner semgrep status is skipped", decision.reasons)
+
+    def test_explicitly_required_scanner_cannot_be_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "pysec.toml"
+            config_path.write_text(
+                '[policy]\nrequired_scanners = ["semgrep"]\n'
                 "[tools.semgrep]\nenabled = false\n",
                 encoding="utf-8",
             )

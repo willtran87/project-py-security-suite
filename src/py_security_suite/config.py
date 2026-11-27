@@ -1674,8 +1674,8 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     trust = _trust_config(mapping["trust"], profile)
     paths = _paths_config(mapping["paths"])
     tool_configs = _tool_configs(mapping["tools"])
-    _validate_required_tools(
-        _required_tools(profile, policy.required_scanners), tool_configs
+    _validate_required_tools(  # disabled profile tools stay required: INCOMPLETE
+        policy.required_scanners or PROFILE_TOOLS[profile], tool_configs
     )
 
     return SuiteConfig(

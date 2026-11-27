@@ -497,7 +497,9 @@ semantic model used; they are not claims that the target executed.
 
 Every selected and applicable tool is required. `policy.required_scanners`
 adds scanners to the profile's required set; it never narrows it, so listing
-only `bandit` does not make another profile scanner optional. A conditional tool with no matching input is reported as
+only `bandit` does not make another profile scanner optional; disabling a
+profile scanner that is not explicitly required is allowed for diagnostic
+subsets but makes the result `INCOMPLETE`. A conditional tool with no matching input is reported as
 `not applicable`; it does not make the scan incomplete. An applicable tool
 that is unavailable, fails, times out, or cannot be parsed produces
 `INCOMPLETE`.
