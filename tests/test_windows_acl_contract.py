@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import py_security_suite.reports as reports
+import py_security_suite.report_acl as reports
 
 
 def _completed(
@@ -27,7 +27,9 @@ def test_acl_inspection_translates_and_validates_rule_contract() -> None:
         '{"sid":"S-1-5-18","type":"Deny","rights":1}]'
     )
     with patch.object(reports.subprocess, "run", return_value=_completed(payload)):
-        assert reports._windows_acl_rules(Path("report"), Path("powershell.exe")) == [
+        assert reports._powershell_windows_acl_rules(
+            Path("report"), Path("powershell.exe")
+        ) == [
             ("S-1-5-21-1", "Allow", 2032127),
             ("S-1-5-18", "Deny", 1),
         ]
@@ -40,14 +42,16 @@ def test_acl_inspection_translates_and_validates_rule_contract() -> None:
         ),
         pytest.raises(OSError, match="ACL inspection failed"),
     ):
-        reports._windows_acl_rules(Path("report"), Path("powershell.exe"))
+        reports._powershell_windows_acl_rules(Path("report"), Path("powershell.exe"))
 
     for invalid in ("{}", "[null]", '[{"sid":"Everyone"}]'):
         with (
             patch.object(reports.subprocess, "run", return_value=_completed(invalid)),
             pytest.raises(OSError, match="invalid"),
         ):
-            reports._windows_acl_rules(Path("report"), Path("powershell.exe"))
+            reports._powershell_windows_acl_rules(
+                Path("report"), Path("powershell.exe")
+            )
 
 
 def test_acl_hardening_removes_every_non_current_principal() -> None:
@@ -100,3 +104,20 @@ def test_acl_verification_requires_one_allowed_full_control_principal() -> None:
     for rules in invalid_rules:
         with pytest.raises(PermissionError, match="ACL postcondition"):
             verify(rules)
+
+
+@pytest.mark.skipif(reports.os.name != "nt", reason="native Windows DACL reader")
+def test_native_acl_reader_matches_powershell_contract(tmp_path: Path) -> None:
+    report = tmp_path / "report"
+    (report / "nested").mkdir(parents=True)
+    (report / "nested" / "evidence.json").write_text("{}", encoding="utf-8")
+    system_root = Path(reports.os.environ.get("SYSTEMROOT") or "C:/Windows")
+    powershell = (
+        system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    reports._harden_report_tree(report)
+    native = reports._native_windows_acl_rules(report)
+    assert sorted(native) == sorted(
+        reports._powershell_windows_acl_rules(report, powershell)
+    )
+    reports._verify_report_permissions(report)

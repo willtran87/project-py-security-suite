@@ -130,6 +130,10 @@ class IsolationProbeTests(unittest.TestCase):
                 "py_security_suite.isolation_probe.run_command", return_value=execution
             ),
             patch("py_security_suite.isolation_probe.sys.platform", "test"),
+            patch(
+                "py_security_suite.isolation_probe._host_can_open_raw_device",
+                return_value=True,
+            ),
         ):
             artifact, errors = probe_isolation_boundary(
                 Path(directory), IsolationConfig(), required=True
@@ -137,6 +141,83 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(artifact["complete"])
         self.assertTrue(artifact["capabilities"]["network-tcp4-denied"])
+
+    @pytest.mark.enable_socket
+    def test_host_listener_receipt_overrides_probe_denial_claim(self) -> None:
+        import socket
+
+        from py_security_suite.isolation_probe import (
+            _apply_host_observations,
+            _listener_receipts,
+        )
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        datagram = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        datagram.bind(("127.0.0.1", 0))
+        quiet = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        quiet.bind(("127.0.0.1", 0))
+        try:
+            socket.create_connection(listener.getsockname(), timeout=2).close()
+            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sender.sendto(b"canary", datagram.getsockname())
+            sender.close()
+            import time
+
+            time.sleep(0.2)
+            receipts = _listener_receipts(
+                {
+                    "network-tcp4-denied": listener,
+                    "network-udp4-denied": datagram,
+                    "network-udp6-denied": quiet,
+                    "network-tcp6-denied": None,
+                }
+            )
+        finally:
+            listener.close()
+            datagram.close()
+            quiet.close()
+        self.assertEqual(
+            receipts,
+            {
+                "network-tcp4-denied": True,
+                "network-udp4-denied": True,
+                "network-udp6-denied": False,
+            },
+        )
+        capabilities = {
+            "network-tcp4-denied": True,
+            "network-udp4-denied": True,
+            "network-udp6-denied": True,
+        }
+        with patch(
+            "py_security_suite.isolation_probe._host_can_open_raw_device",
+            return_value=True,
+        ):
+            _apply_host_observations(capabilities, receipts)
+        self.assertEqual(
+            capabilities,
+            {
+                "network-tcp4-denied": False,
+                "network-udp4-denied": False,
+                "network-udp6-denied": True,
+            },
+        )
+
+    def test_windows_device_canary_is_inconclusive_without_host_access(self) -> None:
+        from py_security_suite.isolation_probe import _apply_host_observations
+
+        capabilities = {"device-namespace-isolated": True}
+        with (
+            patch("py_security_suite.isolation_probe.os.name", "nt"),
+            patch(
+                "py_security_suite.isolation_probe._host_can_open_raw_device",
+                return_value=False,
+            ),
+        ):
+            _apply_host_observations(capabilities, {})
+        self.assertFalse(capabilities["device-namespace-isolated"])
 
     @pytest.mark.enable_socket
     def test_required_probe_fails_closed_without_linux_policy_introspection(

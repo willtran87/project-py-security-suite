@@ -107,18 +107,25 @@ def purge_verified_report(
         raise ValueError(
             "expired report purge requires an RFC 3161 trusted-time receipt"
         )
-    status = retention_status(
-        report,
-        observed_at=observed_at,
-        trusted_time_context=trusted_time_context,
-    )
-    if require_expired and not status["expired"]:
-        raise ValueError("report retention deadline has not been reached")
     root = resolve_regular_directory(report, "report")
     temporary = Path(tempfile.mkdtemp(prefix=f".{root.name}.purge-", dir=root.parent))
     temporary.rmdir()
     with hold_parent_directory(root, "report purge") as parent:
+        # Detach first, then verify the detached tree: verifying the public
+        # name and renaming afterwards would delete whatever was swapped in
+        # between. A tree that fails verification is restored unchanged.
         parent.rename(root, temporary)
+        try:
+            status = retention_status(
+                temporary,
+                observed_at=observed_at,
+                trusted_time_context=trusted_time_context,
+            )
+            if require_expired and not status["expired"]:
+                raise ValueError("report retention deadline has not been reached")
+        except BaseException:
+            parent.rename(temporary, root)
+            raise
         # If deletion fails, leave the report detached at the private tombstone
         # instead of restoring a potentially partial report under its trusted name.
         parent.remove_tree(temporary)

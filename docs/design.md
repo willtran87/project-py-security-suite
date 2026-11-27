@@ -1060,7 +1060,13 @@ flowchart LR
 - Source findings show highlighted, line-numbered context. Binary artifact
   findings instead show the exact normalized path, SHA-256, and byte size; they
   never imply that a source line exists for a wheel or archive.
-- `results.sarif` supports GitHub code-scanning ingestion.
+- `results.sarif` supports GitHub code-scanning ingestion. Rules are keyed by
+  scanner rule and severity (`<tool>/<rule>/<severity>`), because GitHub reads
+  `security-severity` only from the rule. Results carry the suite fingerprint
+  as `partialFingerprints["pysecFingerprint/v1"]` and RFC 3986
+  percent-encoded, in-target artifact URIs. Out-of-target locations are
+  omitted. Risk-accepted findings stay in the file with an accepted external
+  suppression, so they are not closed as fixed.
 - `findings.json` is the stable machine-readable finding collection.
 - `source-inventory.json` binds each maintained source path, byte size, and
   SHA-256 to the aggregate source digest and supports non-invented clean-corpus

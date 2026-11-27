@@ -259,6 +259,94 @@ def _host_ipv4_address() -> str | None:
     return None
 
 
+_PROBE_FIELDS = frozenset(
+    {
+        "process_id",
+        "kernel_identity_sha256",
+        "tcp4_denied",
+        "udp4_denied",
+        "tcp6_denied",
+        "host_tcp4_denied",
+        "host_udp4_denied",
+        "udp6_denied",
+        "unix_socket_denied",
+        "raw_socket_denied",
+        "proxy_environment_cleared",
+        "host_interface_tested",
+        "unix_socket_tested",
+        "target_root_read_only",
+        "target_nested_read_only",
+        "link_creation_denied",
+        "private_scratch_writable",
+        "host_secret_read_denied",
+        "credential_environment_cleared",
+        "parent_process_access_denied",
+        "process_namespace_isolated",
+        "host_shared_memory_denied",
+        "device_namespace_isolated",
+        "linux_policy_tested",
+        "linux_no_new_privileges",
+        "linux_capabilities_dropped",
+        "linux_seccomp_mode",
+        "linux_seccomp_filters",
+        "windows_policy_tested",
+        "windows_dep_enabled",
+        "windows_aslr_enabled",
+        "windows_dynamic_code_prohibited",
+        "windows_child_processes_prohibited",
+    }
+)
+
+
+def _listener_receipts(listeners: dict[str, socket.socket | None]) -> dict[str, bool]:
+    """Report which host listeners actually received a probe connection/datagram.
+
+    The probe's own view (an OSError or timeout) cannot distinguish a denied
+    channel from a slow or filtered one; the host side is authoritative.
+    """
+    received: dict[str, bool] = {}
+    for capability, listener in listeners.items():
+        if listener is None:
+            continue
+        listener.setblocking(False)
+        try:
+            if listener.type == socket.SOCK_STREAM:
+                connection, _ = listener.accept()
+                connection.close()
+            else:
+                listener.recvfrom(4096)
+        except OSError:
+            received[capability] = False
+        else:
+            received[capability] = True
+    return received
+
+
+def _host_can_open_raw_device() -> bool:  # pragma: no cover - Windows only
+    try:
+        with open(r"\\.\PhysicalDrive0", "rb"):
+            return True
+    except OSError:
+        return False
+
+
+def _apply_host_observations(
+    capabilities: dict[str, bool], receipts: dict[str, bool]
+) -> None:
+    """Override probe self-reports with what the host actually observed."""
+    for capability, was_received in receipts.items():
+        if was_received and capability in capabilities:
+            capabilities[capability] = False
+    # A denied PhysicalDrive0 open proves isolation only when the supervising
+    # principal itself can open it; otherwise the canary is inconclusive.
+    if (
+        os.name == "nt"
+        and "device-namespace-isolated" in capabilities
+        and not _host_can_open_raw_device()
+    ):
+        capabilities["device-namespace-isolated"] = False
+
+
 def _platform_policy_observations(
     parsed_value: dict[str, object] | None,
     config: IsolationConfig,
@@ -510,6 +598,17 @@ def probe_isolation_boundary(
             max_output_bytes=4096,
             environment=environment,
         )
+        receipts = _listener_receipts(
+            {
+                "network-tcp4-denied": tcp4,
+                "network-udp4-denied": udp4,
+                "network-tcp6-denied": tcp6,
+                "network-udp6-denied": udp6,
+                "network-host-tcp4-denied": host_tcp,
+                "network-host-udp4-denied": host_udp,
+                "network-unix-socket-denied": unix_listener,
+            }
+        )
     finally:
         tcp4.close()
         udp4.close()
@@ -546,44 +645,10 @@ def probe_isolation_boundary(
     parsed_value: dict[str, object] | None = None
     try:
         value = strict_loads(execution.stdout)
-        expected = {
-            "process_id",
-            "kernel_identity_sha256",
-            "tcp4_denied",
-            "udp4_denied",
-            "tcp6_denied",
-            "host_tcp4_denied",
-            "host_udp4_denied",
-            "udp6_denied",
-            "unix_socket_denied",
-            "raw_socket_denied",
-            "proxy_environment_cleared",
-            "host_interface_tested",
-            "unix_socket_tested",
-            "target_root_read_only",
-            "target_nested_read_only",
-            "link_creation_denied",
-            "private_scratch_writable",
-            "host_secret_read_denied",
-            "credential_environment_cleared",
-            "parent_process_access_denied",
-            "process_namespace_isolated",
-            "host_shared_memory_denied",
-            "device_namespace_isolated",
-            "linux_policy_tested",
-            "linux_no_new_privileges",
-            "linux_capabilities_dropped",
-            "linux_seccomp_mode",
-            "linux_seccomp_filters",
-            "windows_policy_tested",
-            "windows_dep_enabled",
-            "windows_aslr_enabled",
-            "windows_dynamic_code_prohibited",
-            "windows_child_processes_prohibited",
-        }
+        expected = _PROBE_FIELDS
         if (
             not isinstance(value, dict)
-            or set(value) != expected
+            or frozenset(value) != expected
             or isinstance(value.get("process_id"), bool)
             or not isinstance(value.get("process_id"), int)
             or value["process_id"] < 1
@@ -626,6 +691,7 @@ def probe_isolation_boundary(
         }
     except (TypeError, ValueError) as exc:
         parse_error = str(exc)
+    _apply_host_observations(capabilities, receipts)
     policy_observations = _platform_policy_observations(
         parsed_value, config, sys.platform
     )

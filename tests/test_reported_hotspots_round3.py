@@ -165,7 +165,8 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not initialized"):
             adapter.parse("", self.root)
         adapter._report_path = self.root / "absent.json"
-        self.assertEqual(adapter.parse("", self.root), [])
+        with self.assertRaisesRegex(ValueError, "did not write its JSON report"):
+            adapter.parse("", self.root)
         report = self.root / "invalid.json"
         report.write_text("{}", encoding="utf-8")
         adapter._report_path = report
@@ -173,6 +174,12 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
             adapter.parse("", self.root)
         report.write_text(
             '[1,{"Description":"fixture","StartLine":[]} ]', encoding="utf-8"
+        )
+        adapter._report_path = report
+        with self.assertRaisesRegex(TypeError, "must be an object"):
+            adapter.parse("", self.root)
+        report.write_text(
+            '[{"Description":"fixture","StartLine":[]} ]', encoding="utf-8"
         )
         adapter._report_path = report
         finding = adapter.parse("", self.root)[0]
@@ -246,6 +253,16 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
         self.assertEqual(
             configured.parse('{"results":[{"packages":{}}]}', self.root), []
         )
+        with self.assertRaisesRegex(TypeError, "packages must be a list"):
+            configured.parse('{"results":[{"packages":{"bad":1}}]}', self.root)
+        with self.assertRaisesRegex(TypeError, "vulnerabilities must be a list"):
+            configured.parse(
+                '{"results":[{"packages":[{"vulnerabilities":{"x":1}}]}]}', self.root
+            )
+        with self.assertRaisesRegex(TypeError, "vulnerability must be an object"):
+            configured.parse(
+                '{"results":[{"packages":[{"vulnerabilities":[1]}]}]}', self.root
+            )
         with self.assertRaisesRegex(TypeError, "package result must be an object"):
             configured.parse('{"results":[{"packages":[1]}]}', self.root)
         payload = json.dumps(
@@ -255,7 +272,7 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
                         "source": [],
                         "packages": [
                             {"package": [], "vulnerabilities": {}},
-                            {"vulnerabilities": [1, {"id": "OSV-FIXTURE"}]},
+                            {"vulnerabilities": [{"id": "OSV-FIXTURE"}]},
                         ],
                     }
                 ]

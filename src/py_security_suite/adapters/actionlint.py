@@ -13,12 +13,20 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..execution import RawExecution
 from .base import ScannerAdapter
+from .common import failure_exit_payload, require_results_for_failure_exit
 
 
 class ActionlintAdapter(ScannerAdapter):
     name = "actionlint"
     accepted_exit_codes = frozenset({0, 1})
+
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def _workflows(self, target: Path) -> list[Path]:
         directory = target / ".github" / "workflows"
@@ -63,6 +71,7 @@ class ActionlintAdapter(ScannerAdapter):
         results = strict_json_loads(payload or "[]")
         if not isinstance(results, list):
             raise TypeError("actionlint output must be a JSON list")
+        require_results_for_failure_exit(self.name, self._exit_code, len(results))
         findings: list[Finding] = []
         for result in results:
             if not isinstance(result, dict):

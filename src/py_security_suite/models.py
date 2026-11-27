@@ -222,6 +222,10 @@ def normalize_repo_path(target: Path, path: str | Path) -> str:
     normalized = candidate.as_posix()
     if normalized.startswith("./"):
         normalized = normalized[2:]
+    # A POSIX-relative component such as "C:" ("./C:/x") would read as a
+    # drive-absolute path to Windows consumers of the report.
+    if re.match(r"^[a-zA-Z]:(?:/|$)", normalized):
+        return "<outside-target>"
     return normalized or "."
 
 

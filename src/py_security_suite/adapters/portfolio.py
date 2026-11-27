@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..execution import CommandEnvironment
+from ..execution import CommandEnvironment, RawExecution
 from ..models import (
     Citation,
     Confidence,
@@ -19,6 +19,7 @@ from ..native_evidence import protect_native_report
 from ..strict_json import canonical_bytes
 from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
+from .common import failure_exit_payload, require_results_for_failure_exit
 from .file_output import JsonFileScannerAdapter
 from .sarif import parse_sarif_findings
 from .staging import maintained_repository_files
@@ -328,6 +329,11 @@ class ValidatePyprojectAdapter(ScannerAdapter):
 class ValeAdapter(ScannerAdapter):
     name = "vale"
     accepted_exit_codes = frozenset({0, 1})
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def not_applicable_reason(self, target: Path) -> str | None:
         config = self.config.rules_path
@@ -383,12 +389,18 @@ class ValeAdapter(ScannerAdapter):
                         line=line,
                     )
                 )
+        require_results_for_failure_exit(self.name, self._exit_code, len(findings))
         return findings
 
 
 class KubeLinterAdapter(ScannerAdapter):
     name = "kube-linter"
     accepted_exit_codes = frozenset({0, 1})
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def not_applicable_reason(self, target: Path) -> str | None:
         if (target / "Chart.yaml").is_file() or _has_kubernetes_manifest(target):
@@ -400,13 +412,14 @@ class KubeLinterAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload or "{}")
-        reports = (
-            document.get("Reports", document.get("reports", []))
-            if isinstance(document, dict)
-            else []
-        )
+        if not isinstance(document, dict):
+            raise TypeError("KubeLinter output must be an object")
+        reports = document.get("Reports", document.get("reports", []))
+        if reports is None:
+            reports = []
         if not isinstance(reports, list):
             raise TypeError("KubeLinter output must contain a reports list")
+        require_results_for_failure_exit(self.name, self._exit_code, len(reports))
         findings: list[Finding] = []
         for report in reports:
             if not isinstance(report, dict):

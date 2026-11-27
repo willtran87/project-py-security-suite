@@ -16,7 +16,16 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..execution import RawExecution
 from .base import AdapterResult, ScannerAdapter
+from .common import contains_regular_file, native_suppression_finding
+
+# Gitleaks 8.x always honours a ``.gitleaksignore`` in the scanned source root,
+# even when ``--gitleaks-ignore-path`` names a different file. The suite cannot
+# switch that off, so every entry is surfaced as an unaccepted finding instead.
+NATIVE_IGNORE_FILE = ".gitleaksignore"
+_NATIVE_IGNORE_ENTRY_LIMIT = 10_000
+_DEFAULT_CONFIG = "[extend]\nuseDefault = true\n"
 
 
 class GitleaksAdapter(ScannerAdapter):
@@ -26,10 +35,13 @@ class GitleaksAdapter(ScannerAdapter):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._report_path: Path | None = None
+        self._ignore_path: Path | None = None
+        self._config_path: Path | None = None
+        self._exit_code: int | None = None
         self._mode = "dir"
 
     def not_applicable_reason(self, target: Path) -> str | None:
-        if not any(path.is_file() for path in target.iterdir()):
+        if not contains_regular_file(target):
             return "the target contains no files to inspect for secret history"
         return None
 
@@ -43,17 +55,35 @@ class GitleaksAdapter(ScannerAdapter):
         try:
             return super().run(target)
         finally:
-            if self._report_path is not None:
-                self._report_path.unlink(missing_ok=True)
+            for path in (self._report_path, self._ignore_path, self._config_path):
+                if path is not None:
+                    path.unlink(missing_ok=True)
 
     def build_command(self, executable: str, target: Path) -> list[str]:
-        self._report_path = (
-            Path(tempfile.gettempdir()) / f"pysec-gitleaks-{uuid.uuid4().hex}.json"
-        )
+        stem = Path(tempfile.gettempdir()) / f"pysec-gitleaks-{uuid.uuid4().hex}"
+        self._report_path = stem.with_suffix(".json")
+        # An empty suite-owned ignore file replaces the default lookup of
+        # ``./.gitleaksignore`` in the scanner working directory (the target).
+        self._ignore_path = stem.with_suffix(".gitleaksignore")
+        self._ignore_path.write_bytes(b"")
+        rules = self.config.rules_path
+        if rules is None:
+            # Without an explicit configuration Gitleaks would load a
+            # target-controlled ``.gitleaks.toml`` and its allowlists.
+            self._config_path = stem.with_suffix(".toml")
+            self._config_path.write_text(_DEFAULT_CONFIG, encoding="utf-8")
+            config_path = self._config_path
+        else:
+            config_path = rules.expanduser().resolve()
         self._mode = "git" if (target / ".git").is_dir() else "dir"
-        command = [
+        return [
             executable,
             self._mode,
+            "--config",
+            str(config_path),
+            "--gitleaks-ignore-path",
+            str(self._ignore_path),
+            "--ignore-gitleaks-allow",
             "--no-banner",
             "--log-level",
             "error",
@@ -64,28 +94,35 @@ class GitleaksAdapter(ScannerAdapter):
             str(self._report_path),
             str(target.resolve()),
         ]
-        if self.config.rules_path is not None:
-            command[2:2] = [
-                "--config",
-                str(self.config.rules_path.expanduser().resolve()),
-            ]
-        return command
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return execution.stdout
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         if self._report_path is None:
             raise ValueError("Gitleaks report path was not initialized")
         try:
             if not self._report_path.is_file():
-                return []
-            document = strict_json_loads(self._report_path.read_text(encoding="utf-8"))
+                raise ValueError(
+                    f"Gitleaks did not write its JSON report (exit {self._exit_code})"
+                )
+            report = self._report_path.read_text(encoding="utf-8")
         finally:
             self._report_path.unlink(missing_ok=True)
+        if not report.strip():
+            raise ValueError(f"Gitleaks wrote an empty report (exit {self._exit_code})")
+        document = strict_json_loads(report)
         if not isinstance(document, list):
             raise TypeError("Gitleaks output must be a list")
-        findings: list[Finding] = []
+        if self._exit_code not in (0, None) and not document:
+            raise ValueError(
+                f"Gitleaks exited {self._exit_code} but its report contains no leaks"
+            )
+        findings: list[Finding] = native_ignore_findings(self.name, target)
         for result in document:
             if not isinstance(result, dict):
-                continue
+                raise TypeError("Gitleaks finding must be an object")
             rule_id = str(result.get("RuleID") or "gitleaks.unknown")
             description = str(result.get("Description") or rule_id)
             path = normalize_repo_path(target, str(result.get("File") or "<unknown>"))
@@ -151,6 +188,36 @@ class GitleaksAdapter(ScannerAdapter):
                 )
             )
         return findings
+
+
+def native_ignore_findings(tool: str, target: Path) -> list[Finding]:
+    """Surface target-owned ``.gitleaksignore`` entries as unaccepted findings."""
+    ignore_file = target / NATIVE_IGNORE_FILE
+    if not ignore_file.exists() and not ignore_file.is_symlink():
+        return []
+    if ignore_file.is_symlink() or not ignore_file.is_file():
+        raise ValueError(f"{NATIVE_IGNORE_FILE} is not a regular file")
+    entries = [
+        number
+        for number, line in enumerate(
+            ignore_file.read_text(encoding="utf-8", errors="replace").splitlines(),
+            start=1,
+        )
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if len(entries) > _NATIVE_IGNORE_ENTRY_LIMIT:
+        raise ValueError(f"{NATIVE_IGNORE_FILE} has too many entries to review")
+    return [
+        native_suppression_finding(
+            tool,
+            rule_id="gitleaks.native-suppression",
+            path=NATIVE_IGNORE_FILE,
+            line=number,
+            mechanism=".gitleaksignore entry",
+            area="secrets-history",
+        )
+        for number in entries
+    ]
 
 
 def _integer(value: Any) -> int | None:
