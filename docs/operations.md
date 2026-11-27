@@ -454,7 +454,11 @@ Copy `security/risk-acceptances.example.json`, add only exact normalized
 fingerprints, and configure both `policy.risk_acceptance_path` and the approved
 SHA-256. Every entry requires a disposition, owner, rationale, and ISO expiry
 no more than 366 days away. Expired, duplicate, malformed, ID-mismatched, or
-stale unmatched entries make the result `INCOMPLETE`. Governed findings remain
+stale unmatched entries make the result `INCOMPLETE`. An entry may declare
+`max_severity`; a matching finding rated above it stays active. A
+known-exploited finding stays active unless the entry sets
+`"known_exploited": true`, and is never suppressed in production or release,
+where `max_severity` is mandatory. Governed findings remain
 in `findings.json` for audit but are excluded from active SARIF, SonarQube, and
 action queues.
 

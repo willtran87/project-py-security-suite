@@ -29,7 +29,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/benchmark_adapters.py": 3_130,
     "src/py_security_suite/cli.py": 2_877,
     "src/py_security_suite/closure_plan.py": 3_043,
-    "src/py_security_suite/config.py": 2_559,
+    "src/py_security_suite/config.py": 2_532,
     "src/py_security_suite/execution.py": 1_191,
     "src/py_security_suite/reachability.py": 2_295,
     "src/py_security_suite/cli_benchmark_arguments.py": 209,

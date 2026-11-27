@@ -231,7 +231,7 @@ depends_on = ["py_security_suite.trusted_time", "py_security_suite.path_safety",
 
 [[modules]]
 path = "py_security_suite.config"
-depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers"]
+depends_on = ["py_security_suite.models", "py_security_suite.trusted_observation", "py_security_suite.trust_policy", "py_security_suite.organization_policy_attestation", "py_security_suite.path_safety", "py_security_suite.config_numbers", "py_security_suite.config_policy_floor"]
 
 [[modules]]
 path = "py_security_suite.config_advisor"
@@ -659,6 +659,10 @@ depends_on = ["py_security_suite.path_safety", "py_security_suite.execution", "p
 
 [[modules]]
 path = "py_security_suite.config_numbers"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.config_policy_floor"
 depends_on = []
 
 [[modules]]
