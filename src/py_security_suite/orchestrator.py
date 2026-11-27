@@ -597,7 +597,6 @@ def _scan_sealed_project(
             )
         )
     context_errors.extend(production_state_errors(config.profile, derived_artifacts))
-
     context_errors.extend(
         verify_final_source(inventory, target, scan_target, source_exclusions)
     )
@@ -612,6 +611,7 @@ def _scan_sealed_project(
         network_isolation_attested=network_isolation_attested,
         inventory=inventory,
         context_errors=context_errors,
+        diagnostic_without_isolation=diagnostic_without_isolation,
     )
     derived_artifacts["assurance-claims.json"] = assurance_claims_artifact(
         findings,

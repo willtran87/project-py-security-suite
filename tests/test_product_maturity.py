@@ -275,7 +275,7 @@ class ProductMaturityTests(unittest.TestCase):
             policy = root / "policy.toml"
             repository = root / "pysec.toml"
             policy.write_text(
-                'profile = "production"\n[policy]\nrequired_scanners = ["bandit"]\n',
+                'profile = "quick"\n[policy]\nrequired_scanners = ["bandit"]\n',
                 encoding="utf-8",
             )
             repository.write_text('profile = "quick"\n', encoding="utf-8")

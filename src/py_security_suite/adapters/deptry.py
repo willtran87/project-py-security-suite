@@ -15,6 +15,7 @@ from ..models import (
 )
 from ..strict_json import loads as strict_json_loads
 from .file_output import JsonFileScannerAdapter
+from .common import require_results_for_failure_exit
 from .staging import maintained_files
 
 
@@ -58,6 +59,7 @@ class DeptryAdapter(JsonFileScannerAdapter):
         results = strict_json_loads(payload or "[]")
         if not isinstance(results, list):
             raise TypeError("deptry output must be a JSON list")
+        require_results_for_failure_exit(self.name, self._exit_code, len(results))
         findings: list[Finding] = []
         for result in results:
             if not isinstance(result, dict):

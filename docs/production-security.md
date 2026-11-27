@@ -674,7 +674,14 @@ retain every OCI descriptor blob, validate config diff IDs, safely parse each
 layer, and bind signature-envelope and provenance blobs.
 RFC 3161 contexts may provide two to five independent authorities; quorum mode
 requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
-seconds, and rejects clock rollback or same-challenge forks.
+seconds, and rejects clock rollback or same-challenge forks. Independence uses
+normalized authority names (NFKC, case-folded, whitespace-collapsed) and
+distinct trust anchors, signer SPKIs and signer certificates, not evidence-file
+digests. Every quorum authority must be bound in `PYSEC_TSA_AUTHORITIES` as
+`name=<SHA-256 of the DER trust-anchor certificate>`. For legacy receipts, the
+anchor is the pinned signer certificate. One anchor cannot be bound to two
+names. A TSA certificate revoked for key or CA compromise, or with an
+unspecified or absent reason, invalidates every receipt whatever its date.
 The KMS operation must pass
 through its digest-pinned launcher and preserve an mTLS/TLS 1.3 transcript,
 endpoint allowlist, peer identity, and launcher identity that publication

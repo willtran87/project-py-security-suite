@@ -13,13 +13,21 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..execution import RawExecution
 from .base import ScannerAdapter
+from .common import failure_exit_payload, require_results_for_failure_exit
 from .staging import maintained_files
 
 
 class MypyAdapter(ScannerAdapter):
     name = "mypy"
     accepted_exit_codes = frozenset({0, 1})
+
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def not_applicable_reason(self, target: Path) -> str | None:
         if not maintained_files(target, frozenset({".py"})):
@@ -127,6 +135,7 @@ class MypyAdapter(ScannerAdapter):
                     ],
                 )
             )
+        require_results_for_failure_exit(self.name, self._exit_code, len(findings))
         return findings
 
 
