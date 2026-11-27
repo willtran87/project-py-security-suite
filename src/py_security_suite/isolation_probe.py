@@ -648,7 +648,7 @@ def probe_isolation_boundary(
         expected = _PROBE_FIELDS
         if (
             not isinstance(value, dict)
-            or set(value) != expected
+            or frozenset(value) != expected
             or isinstance(value.get("process_id"), bool)
             or not isinstance(value.get("process_id"), int)
             or value["process_id"] < 1
