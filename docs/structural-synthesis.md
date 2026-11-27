@@ -1,7 +1,5 @@
 # Structural synthesis
 
-Last reviewed: 2026-08-13
-
 Structural synthesis combines independent repository signals so reviewers can
 act on code-island and dead-code results without treating a single static tool as
 proof. It runs after scanner normalization and writes

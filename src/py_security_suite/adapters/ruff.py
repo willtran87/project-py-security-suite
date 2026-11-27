@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..execution import CommandEnvironment
+from ..execution import CommandEnvironment, RawExecution
 from ..models import (
     Citation,
     Confidence,
@@ -17,12 +17,19 @@ from ..models import (
 )
 from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
+from .common import failure_exit_payload, require_results_for_failure_exit
 from .staging import maintained_files
 
 
 class RuffAdapter(ScannerAdapter):
     name = "ruff"
     accepted_exit_codes = frozenset({0, 1})
+
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def not_applicable_reason(self, target: Path) -> str | None:
         if not maintained_files(target, frozenset({".py"})):
@@ -68,6 +75,7 @@ class RuffAdapter(ScannerAdapter):
         document = strict_json_loads(payload)
         if not isinstance(document, list):
             raise TypeError("Ruff output must be a list")
+        require_results_for_failure_exit(self.name, self._exit_code, len(document))
         findings: list[Finding] = []
         for result in document:
             if not isinstance(result, dict):

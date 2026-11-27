@@ -1,7 +1,5 @@
 # LLM-guided adversarial testing
 
-Last reviewed: 2026-08-27
-
 Every scan emits `llm-adversarial-plan.json` 1.0. The artifact turns existing
 findings, OpenAPI abuse scenarios, uncovered assurance domains, ranked
 architecture targets, and code-health root causes into a bounded queue of

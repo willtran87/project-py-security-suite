@@ -86,9 +86,9 @@ class OsvScannerAdapter(ScannerAdapter):
             source = result.get("source") or {}
             source_path = source.get("path") if isinstance(source, dict) else None
             path = normalize_repo_path(target, str(source_path or "dependency"))
-            packages = result.get("packages", [])
+            packages = result.get("packages") or []
             if not isinstance(packages, list):
-                continue
+                raise TypeError("OSV packages must be a list")
             for package_result in packages:
                 findings.extend(self._package_findings(package_result, path))
         return findings
@@ -144,13 +144,13 @@ class OsvScannerAdapter(ScannerAdapter):
         name = str(package.get("name") or "unknown-package")
         version = str(package.get("version") or "unknown")
         ecosystem = str(package.get("ecosystem") or "PyPI")
-        vulnerabilities = package_result.get("vulnerabilities", [])
+        vulnerabilities = package_result.get("vulnerabilities") or []
         if not isinstance(vulnerabilities, list):
-            return []
+            raise TypeError("OSV vulnerabilities must be a list")
         findings: list[Finding] = []
         for vulnerability in vulnerabilities:
             if not isinstance(vulnerability, dict):
-                continue
+                raise TypeError("OSV vulnerability must be an object")
             advisory = str(vulnerability.get("id") or "OSV-UNKNOWN")
             aliases = _advisory_aliases(vulnerability, advisory)
             fixed_versions = _fixed_versions(vulnerability)

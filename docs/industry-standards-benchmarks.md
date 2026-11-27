@@ -1,7 +1,5 @@
 # Industry standards and benchmarks
 
-Last reviewed: 2026-08-31
-
 The suite keeps five assurance layers separate so that a catalog reference is
 never mistaken for test execution or certification:
 

@@ -11,13 +11,11 @@ from urllib.parse import unquote, urlsplit
 _SITE_HOST = "willtran87.github.io"
 _SITE_PREFIX = "/project-py-security-suite/"
 _MERMAID_SOURCE = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js"
-_MERMAID_INTEGRITY = (
-    "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"
-)
+_MERMAID_INTEGRITY = "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"  # pragma: allowlist secret
 _MERMAID_LOADER = """const diagrams = [...document.querySelectorAll(".pysec-mermaid > code")];
 const mermaidSource = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js";
 const mermaidIntegrity =
-  "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS";
+  "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"; // pragma: allowlist secret
 
 if (diagrams.length) {
   let started = false;

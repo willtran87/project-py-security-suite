@@ -6,9 +6,10 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Any
 
-from ..execution import run_command
+from ..execution import RawExecution, run_command
 from ..models import ToolStatus
 from .base import AdapterResult, ScannerAdapter
+from .common import failure_exit_payload
 
 
 class JsonFileScannerAdapter(ScannerAdapter):
@@ -16,6 +17,7 @@ class JsonFileScannerAdapter(ScannerAdapter):
 
     output_filename = "results.json"
     minimum_json_output_bytes = 0
+    _exit_code: int | None = None
 
     def json_output_limit_bytes(self) -> int:
         """Return the bounded file allowance without enlarging process streams."""
@@ -70,6 +72,9 @@ class JsonFileScannerAdapter(ScannerAdapter):
                     f"timed out after {self.config.timeout_seconds} seconds",
                     version,
                 )
+            limit_error = _execution_limit_error(execution)
+            if limit_error:
+                return self._failed(execution, ToolStatus.FAILED, limit_error, version)
             if execution.exit_code not in self.accepted_exit_codes:
                 return self._failed(
                     execution,
@@ -85,6 +90,8 @@ class JsonFileScannerAdapter(ScannerAdapter):
                         "scanner JSON output exceeded the configured limit"
                     )
                 payload = output.read_text(encoding="utf-8")
+                self._exit_code = execution.exit_code
+                failure_exit_payload(self.name, execution, payload)
                 findings = self.parse(payload, target)
                 artifacts = self.derived_artifacts(payload, target)
             except (
@@ -151,3 +158,25 @@ class JsonFileScannerAdapter(ScannerAdapter):
     ) -> AdapterResult:
         run = self._tool_run(execution, status, error=error, version=version)
         return AdapterResult([], run, self._diagnostic(run, execution))
+
+
+def _execution_limit_error(execution: RawExecution) -> str | None:
+    """Return why a bounded execution must not be parsed as a scanner result."""
+    if execution.stop_reason:
+        return execution.stop_reason
+    if execution.output_limit_exceeded:
+        return (
+            "scanner output exceeded the configured byte limit and its process "
+            "tree was terminated"
+        )
+    if execution.scratch_limit_exceeded:
+        return (
+            "scanner private scratch space exceeded the configured byte limit "
+            "and its process tree was terminated"
+        )
+    if execution.resident_memory_limit_exceeded:
+        return (
+            "scanner process-tree resident memory exceeded the enforced limit "
+            "and its process tree was terminated"
+        )
+    return None

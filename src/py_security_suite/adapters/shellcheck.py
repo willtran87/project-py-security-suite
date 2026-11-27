@@ -13,14 +13,21 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..execution import RawExecution
 from .base import ScannerAdapter
-from .common import map_severity
+from .common import failure_exit_payload, map_severity, require_results_for_failure_exit
 from .staging import maintained_repository_files
 
 
 class ShellCheckAdapter(ScannerAdapter):
     name = "shellcheck"
     accepted_exit_codes = frozenset({0, 1})
+
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def _scripts(self, target: Path) -> list[Path]:
         scripts: list[Path] = []
@@ -56,9 +63,13 @@ class ShellCheckAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        results = strict_json_loads(payload or "[]")
+        document = strict_json_loads(payload or "[]")
+        # ``--format=json1`` wraps diagnostics as {"comments": [...]}; the
+        # legacy ``json`` format emits the bare list.
+        results = document.get("comments") if isinstance(document, dict) else document
         if not isinstance(results, list):
             raise TypeError("ShellCheck output must be a list")
+        require_results_for_failure_exit(self.name, self._exit_code, len(results))
         findings: list[Finding] = []
         for result in results:
             if not isinstance(result, dict):
