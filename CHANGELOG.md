@@ -11,6 +11,35 @@
   production/release, `--diagnostic-without-isolation` always yields
   `INCOMPLETE`, `incomplete_is_blocking = false` is rejected, and boolean
   settings must be TOML booleans.
+- **SARIF output contract change.** `results.sarif` rule descriptors are now
+  keyed by scanner rule and severity (`<tool>/<rule>/<severity>`), so GitHub
+  shows each alert at its own security severity instead of the first finding's.
+  Results also carry `properties.security-severity`. Expect a one-time re-key of
+  existing code-scanning alerts after upgrading.
+- SARIF stores the suite fingerprint under `partialFingerprints`
+  `pysecFingerprint/v1` instead of GitHub's reserved `primaryLocationLineHash`.
+- SARIF artifact URIs are RFC 3986 percent-encoded. Locations outside the
+  target, such as `<outside-target>`, absolute paths or `..` traversal, are
+  omitted instead of being published as placeholders.
+- Escape scanner text in SARIF `help.markdown` and bracket link syntax in
+  `message.text`, so scanner output cannot inject Markdown links or images.
+- Emit findings suppressed by governed risk acceptance in SARIF with an
+  `external`/`accepted` suppression and justification. Previously they were
+  dropped, which made GitHub close them as fixed.
+- Escape `|` in Markdown text and code cells so scanner text cannot split
+  tables in reports and `GITHUB_STEP_SUMMARY`.
+- Judge trusted-time quorum independence on normalized authority names, trust
+  anchor, signer SPKI and certificate fingerprints, not evidence file bytes.
+  `PYSEC_TSA_AUTHORITIES` entries may bind a name to its trust-anchor
+  certificate as `name=<sha256>`. Quorum members must be bound, and bound names
+  must chain to that anchor.
+- Require the RFC 3161 TSA signer EKU to be critical and contain only
+  `id-kp-timeStamping` (RFC 3161 section 2.3).
+- Reject TSA certificates revoked for key or CA compromise, or with an
+  unspecified or absent reason, whatever the revocation date. Accept revocation
+  snapshots published after issuance so a later compromise is detected.
+- Reject governance authority keys once verification time reaches
+  `revoked_at`, so a revoked key cannot pass by backdating `signed_at`.
 
 - Isolate validator and child-process bytecode caches, rejecting stale reports and
   preserving exact wheel receipts and report bytes in unique archives.

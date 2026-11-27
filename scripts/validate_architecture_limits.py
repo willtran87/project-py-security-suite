@@ -21,7 +21,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_emerging_assurance_catalog.py": 1_188,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
     "src/py_security_suite/risk_paths.py": 7_265,
-    "src/py_security_suite/reports.py": 7_744,
+    "src/py_security_suite/reports.py": 7_688,
     "src/py_security_suite/data_exposure.py": 3_778,
     "src/py_security_suite/evidence_ingest.py": 2_511,
     "src/py_security_suite/artifact_validation.py": 2_405,
