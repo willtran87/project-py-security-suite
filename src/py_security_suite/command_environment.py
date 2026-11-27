@@ -79,7 +79,13 @@ def isolated_environment(
             os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
         )
         path_entries.extend((str(windows / "System32"), str(windows)))
-        env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+        # Batch files are interpreted by cmd.exe, whose argument parsing turns
+        # repository-controlled filenames into commands. Only native images
+        # are discoverable, and the working directory (the scanned target) is
+        # never searched for helper executables (Go, Python and cmd.exe honour
+        # NoDefaultCurrentDirectoryInExePath).
+        env["PATHEXT"] = ".COM;.EXE"
+        env["NoDefaultCurrentDirectoryInExePath"] = "1"
     else:
         path_entries.extend(("/usr/local/bin", "/usr/bin", "/bin"))
     env["PATH"] = os.pathsep.join(dict.fromkeys(path_entries))
@@ -92,19 +98,7 @@ def isolated_environment(
         }
     )
     if extra:
-        forbidden = {
-            "DYLD_INSERT_LIBRARIES",
-            "DYLD_LIBRARY_PATH",
-            "LD_LIBRARY_PATH",
-            "LD_PRELOAD",
-            "PATH",
-            "PYTHONHOME",
-            "PYTHONPATH",
-            "PYTHONPYCACHEPREFIX",
-            "PYTHONDONTWRITEBYTECODE",
-            "PYTHONNOUSERSITE",
-        }
-        rejected = sorted(key for key in extra if key.upper() in forbidden)
+        rejected = sorted(key for key in extra if _loader_variable(key))
         if rejected:
             raise ValueError(
                 "scanner environment cannot override executable or loader paths: "
@@ -112,3 +106,80 @@ def isolated_environment(
             )
         env.update(extra)
     return env
+
+
+# Variables that change which code a dynamic loader, interpreter or helper
+# runs. They are never accepted from any scanner environment source.
+_LOADER_VARIABLES = frozenset(
+    {
+        "BASH_ENV",
+        "COMSPEC",
+        "ENV",
+        "NODEFAULTCURRENTDIRECTORYINEXEPATH",
+        "PATH",
+        "PATHEXT",
+        "PYTHONBREAKPOINT",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONEXECUTABLE",
+        "PYTHONHOME",
+        "PYTHONINSPECT",
+        "PYTHONNOUSERSITE",
+        "PYTHONPATH",
+        "PYTHONPYCACHEPREFIX",
+        "PYTHONSAFEPATH",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "PYTHONWARNINGS",
+    }
+)
+_LOADER_PREFIXES = ("LD_", "DYLD_")
+# Interpreter option variables that load agents or modules. Scanner adapters
+# may set them in code (for example a bounded JVM heap for CodeQL), but they
+# are never accepted from organization or repository configuration.
+_CONFIGURED_CODE_VARIABLES = frozenset(
+    {
+        "GIT_ASKPASS",
+        "GIT_EXEC_PATH",
+        "GIT_EXTERNAL_DIFF",
+        "GIT_PROXY_COMMAND",
+        "GIT_SSH",
+        "GIT_SSH_COMMAND",
+        "GIT_TEMPLATE_DIR",
+        "JAVA_TOOL_OPTIONS",
+        "JDK_JAVA_OPTIONS",
+        "_JAVA_OPTIONS",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "PERL5DB",
+        "PERL5LIB",
+        "PERL5OPT",
+        "PERLLIB",
+        "PROMPT_COMMAND",
+        "PS4",
+        "RUBYLIB",
+        "RUBYOPT",
+        "SHELLOPTS",
+    }
+)
+_CONFIGURED_CODE_PREFIXES = ("GIT_CONFIG",)
+
+
+def _loader_variable(name: str) -> bool:
+    upper = name.upper()
+    return upper in _LOADER_VARIABLES or upper.startswith(_LOADER_PREFIXES)
+
+
+def reject_configured_code_variables(environment: dict[str, str]) -> None:
+    """Reject configuration-sourced variables that inject code into scanners."""
+    rejected = sorted(
+        key
+        for key in environment
+        if _loader_variable(key)
+        or key.upper() in _CONFIGURED_CODE_VARIABLES
+        or key.upper().startswith(_CONFIGURED_CODE_PREFIXES)
+    )
+    if rejected:
+        raise ValueError(
+            "configured scanner environment cannot set code-loading variables: "
+            + ", ".join(rejected)
+        )

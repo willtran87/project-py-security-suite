@@ -1070,6 +1070,13 @@ class OrchestratorTests(unittest.TestCase):
             self.assertFalse(invalid_output.exists())
             self.assertEqual(list(root.glob(".invalid-report.staging-*")), [])
 
+    # Each publication scenario runs complete scans; they are separate tests so
+    # no single test approaches the per-test timeout on a loaded xdist worker.
+    def test_report_replacement_refuses_unverified_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "project"
+            target.mkdir()
             replacement_file = root / "replacement-file"
             replacement_file.write_text("preserve me", encoding="utf-8")
             with self.assertRaisesRegex(
@@ -1105,6 +1112,11 @@ class OrchestratorTests(unittest.TestCase):
                 )
             self.assertEqual(user_file.read_text(encoding="utf-8"), "preserve me")
 
+    def test_report_replacement_is_atomic_and_rolls_back(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "project"
+            target.mkdir()
             replaced_output = root / "replaced-report"
             first = scan_project(
                 target=target,
