@@ -18,7 +18,7 @@ incomplete_is_blocking = true
 # advisories (mcp, opentelemetry-api, wcmatch); expires 2027-01-26. See
 # docs/compatibility-matrix.md. Any edit to the ledger must update this digest.
 risk_acceptance_path = "/workspace/security/self-scan-risk-acceptances.json"
-risk_acceptance_sha256 = "fb190c8686d8818ef2bdca653161e407f1258606f100440ea156e107e835f5e7" # pragma: allowlist secret - public ledger checksum
+risk_acceptance_sha256 = "7d6a7f8ba0d6f5a964e5b1ce780579b30adf553de1f16dca29330a5b4d17e7e3" # pragma: allowlist secret - public ledger checksum
 
 [reports]
 include_sanitized_evidence = true

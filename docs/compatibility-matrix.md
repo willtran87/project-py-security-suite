@@ -72,9 +72,9 @@ in `security/self-scan.toml`:
   re-approved.
 - **Stale entries:** an entry that no longer matches a current finding is a
   policy error, so the ledger must be cleaned up when Semgrep relaxes the pins.
-- **Severity bound:** add `max_severity` (`high` for all eight) once the bounded
-  acceptance format is available on this branch; it is required only for the
-  production and release profiles.
+- **Severity bound:** every entry declares `max_severity = "high"`, so a
+  re-rated (critical) or newly known-exploited advisory is no longer covered
+  and blocks the self-scan again.
 
 ## Meaning of support
 
