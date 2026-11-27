@@ -1,7 +1,5 @@
 # Findings-driven closure register
 
-Last reviewed: 2026-08-27
-
 This register resolves the current 89-item maturity backlog. **Implemented**
 means this repository contains a testable control. **Conditional** means the
 adapter and strict evidence contract exist, but a project-specific target or

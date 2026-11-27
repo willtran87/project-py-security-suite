@@ -1,7 +1,5 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-31
-
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
 
@@ -28,6 +26,33 @@ flowchart LR
 The portfolio combines built-in scanner execution with bounded evidence
 ingestion. Conditional controls remain visible as `not applicable`; relevant
 controls that cannot run are reported as execution gaps.
+
+## Python runtime support
+
+| Component | Declared `requires-python` | Verified by | Why |
+|---|---|---|---|
+| Core package (`py-security-suite`) | `>=3.11` (classifiers 3.11 to 3.14) | CI `test` and `dependency-audit` matrices on Linux, Windows and macOS for 3.11, 3.12, 3.13 and 3.14 | The installable suite and its runtime dependencies support 3.14 |
+| Companion lane (`companion/`) | `>=3.11,<3.14` | `companion-*` CI jobs on Python 3.13 | The companion lock (browser, fuzzing, Kafka/PostgreSQL, IAST and formal-analysis integrations) has not yet been resolved and qualified on 3.14; lift the cap once it is |
+| Scanner image (`containers/scanner/`) | `>=3.11,<3.14`; image runs 3.11 | Deep assurance self-scan | Pinned scanner releases (Semgrep, Bandit, detect-secrets) are locked and qualified for this range; the image deliberately runs the oldest supported runtime so the published floor is exercised end to end |
+
+The 3.14 cap on the companion and scanner projects therefore never restricts
+installing or running the core package on 3.14; it only limits which
+interpreter can host those separately locked environments.
+
+### Scanner image residual dependency advisories
+
+Semgrep 1.187.0 pins `mcp==1.29.0`, `opentelemetry-api~=1.37.0` and
+`wcmatch~=8.3` exactly or narrowly, so the scanner image lock cannot take the
+fixed releases of those packages (published advisories are fixed in `mcp`
+1.30.0, `opentelemetry-api` 1.45.1/1.45.2 and `wcmatch` 11.2). The risk is
+accepted as residual because the image runs Semgrep offline with metrics and
+version checks disabled, never starts Semgrep's MCP server, and exports no
+telemetry. `wcmatch` still evaluates ignore patterns that can come from the
+scanned target, so its exposure is bounded only by the scanner's process,
+network and filesystem isolation rather than eliminated. Re-evaluate on
+every Semgrep update; the scanner lock is otherwise kept free of known
+advisories, and the root and companion locks are audited weekly by the
+scheduled dependency audit workflow.
 
 ## Meaning of support
 

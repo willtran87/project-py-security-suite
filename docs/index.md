@@ -1,7 +1,5 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-31
-
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
 verification happen inside an enterprise-controlled isolated boundary.
@@ -251,7 +249,7 @@ and zero findings on the safe negative control.
 
 | Group | Versions |
 |---|---|
-| Core security | Bandit 1.9.4; Semgrep 1.175.0; detect-secrets package 1.5.0; OSV-Scanner 2.3.8 |
+| Core security | Bandit 1.9.4; Semgrep 1.187.0; detect-secrets package 1.5.0; OSV-Scanner 2.3.8 |
 | Python quality | Ruff 0.15.22; Pylint 4.0.6; mypy 2.1.0; Pyright 1.1.411; Vulture 2.16; Radon 6.0.1; Tach 0.35.0 |
 | Dependency and test evidence | deptry 0.24.0; diff-cover 10.2.0; CycloneDX Python 7.3.0 |
 | Delivery | actionlint 1.7.12; Hadolint 2.14.0; Checkov 3.2.494; PSScriptAnalyzer 1.25.0 |
@@ -361,7 +359,8 @@ There is no ambiguous `latest` alias or remote schema lookup.
 
 ## Documentation maintenance
 
-- Update `Last reviewed` when behavior, evidence, or pinned tools change.
+- Do not add hand-written review dates; page freshness comes from Git history
+  (`git log -1 -- docs/PAGE.md`) and the published site build.
 - Keep connected acquisition commands separate from isolated execution commands.
 - Treat implementation and generated manifests as authoritative when they
   disagree with prose.

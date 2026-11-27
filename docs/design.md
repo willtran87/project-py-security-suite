@@ -1,8 +1,6 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-31
-
 ## Purpose
 
 Python Security Suite coordinates several complementary, locally installed

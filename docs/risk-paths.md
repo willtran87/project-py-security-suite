@@ -1,7 +1,5 @@
 # Static risk-route synthesis
 
-Last reviewed: 2026-08-13
-
 `risk-paths.json` turns several separate observations into one bounded review
 route: a declared Python entry point, Graphify file relationships, a normalized
 finding or review-worthy sensitive-data sink, runtime/reachability state,

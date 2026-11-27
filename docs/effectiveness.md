@@ -4,8 +4,6 @@ See [measured acceptance](professional-acceptance.md) for the latest completed
 native detection measurements and [validation pipeline](validation-pipeline.md)
 for exact-wheel verification, failed-run retention and runtime qualification.
 
-Last reviewed: 2026-09-12
-
 ## Executable detection regression gate
 
 See [professional acceptance](professional-acceptance.md) for the installed-wheel
