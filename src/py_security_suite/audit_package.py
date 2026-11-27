@@ -13,7 +13,13 @@ from typing import Any
 
 from .execution import sha256_file
 from .passport import verify_report
-from .path_safety import resolve_regular_file, resolve_unlinked_path
+from .path_safety import (
+    archive_member_key,
+    contained_archive_destination,
+    portable_archive_member,
+    resolve_regular_file,
+    resolve_unlinked_path,
+)
 from .release_manifest import bound_report_digest
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
@@ -127,9 +133,9 @@ def verify_audit_package(package: Path, *, package_sha256: str) -> dict[str, Any
         if not infos or len(infos) > _MAX_FILES:
             raise ValueError("audit package must contain 1-10000 files")
         names = [info.filename for info in infos]
-        if len(set(names)) != len(names) or any(
-            not _safe_archive_name(name) for name in names
-        ):
+        if any(not _safe_archive_name(name) for name in names) or len(
+            {archive_member_key(PurePosixPath(name)) for name in names}
+        ) != len(names):
             raise ValueError("audit package contains duplicate or unsafe paths")
         if sum(info.file_size for info in infos) > _MAX_PACKAGE_BYTES:
             raise ValueError("audit package expanded size exceeds 2 GiB")
@@ -143,20 +149,25 @@ def verify_audit_package(package: Path, *, package_sha256: str) -> dict[str, Any
         actual = set(names) - {"audit-manifest.json"}
         if set(declared) != actual:
             raise ValueError("audit package file set does not match its manifest")
+        evidence_documents: dict[str, bytes] = {}
         for name, record in declared.items():
+            _validate_entry_kind(name, record)
             data = _bounded_archive_read(archive, name)
             if (
                 hashlib.sha256(data).hexdigest() != record["sha256"]
                 or len(data) != record["size_bytes"]
             ):
                 raise ValueError(f"audit package entry identity mismatch: {name}")
+            if record["kind"] == "evidence":
+                evidence_documents[name] = data
         with tempfile.TemporaryDirectory(prefix="pysec-audit-verify-") as directory:
             report_root = Path(directory) / "report"
+            report_root.mkdir()
             for name in sorted(
                 value for value in actual if value.startswith("report/")
             ):
                 relative = PurePosixPath(name).relative_to("report")
-                target = report_root.joinpath(*relative.parts)
+                target = contained_archive_destination(report_root, relative)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(_bounded_archive_read(archive, name))
             verification = verify_report(report_root)
@@ -166,6 +177,15 @@ def verify_audit_package(package: Path, *, package_sha256: str) -> dict[str, Any
         or verification["scan_id"] != report["scan_id"]
     ):
         raise ValueError("audit package report identity does not match its manifest")
+    # Re-run the creation-time binding: each evidence sidecar must still name
+    # the embedded report's checksum seal, not merely match its own digest.
+    for name, data in sorted(evidence_documents.items()):
+        document = strict_json_loads(data)
+        if (
+            not isinstance(document, dict)
+            or bound_report_digest(document) != verification["checksums_sha256"]
+        ):
+            raise ValueError(f"audit evidence {name} is not bound to this report")
     evidence_names = sorted(
         PurePosixPath(name).stem for name in declared if name.startswith("evidence/")
     )
@@ -218,14 +238,25 @@ def _bounded_archive_read(archive: zipfile.ZipFile, name: str) -> bytes:
 
 
 def _safe_archive_name(name: str) -> bool:
-    path = PurePosixPath(name)
-    return (
-        bool(name)
-        and not path.is_absolute()
-        and ".." not in path.parts
-        and "\\" not in name
-        and not name.endswith("/")
-    )
+    if name.endswith("/"):
+        return False
+    try:
+        return portable_archive_member(name).as_posix() == name
+    except ValueError:
+        return False
+
+
+def _validate_entry_kind(name: str, record: dict[str, Any]) -> None:
+    if record["kind"] == "report" and name.startswith("report/"):
+        return
+    if (
+        record["kind"] == "evidence"
+        and name.startswith("evidence/")
+        and name.endswith(".json")
+        and _NAME.fullmatch(name[len("evidence/") : -len(".json")])
+    ):
+        return
+    raise ValueError(f"audit package entry kind does not match its path: {name}")
 
 
 def _validate_manifest(value: object) -> None:
