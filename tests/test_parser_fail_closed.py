@@ -209,6 +209,11 @@ class NativeSuppressionFlagTests(_TemporaryRoot):
                 "semgrep", self.root
             ),
         )
+        suite_bandit = BanditAdapter(ToolConfig(), 4096)
+        suite_bandit._suite_target = True
+        self.assertNotIn(
+            "--ignore-nosec", suite_bandit.build_command("bandit", self.root)
+        )
         suite = SemgrepAdapter(ToolConfig(rules_path=rules), 4096)
         suite._suite_target = True
         self.assertNotIn("--disable-nosem", suite.build_command("semgrep", self.root))
