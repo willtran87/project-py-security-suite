@@ -116,10 +116,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     # Importing Mutmut is intentionally delayed: its module selects the fork
     # multiprocessing context at import time and exits on unsupported hosts.
     from mutmut.__main__ import cli
-    from mutmut.configuration import Config
+    from mutmut.configuration import config as mutmut_config
 
     if options.shard_index is not None and options.shard_count is not None:
-        config = Config.get()
+        config = mutmut_config()
         weights = mutation_workload_weights(config.only_mutate)
         config.only_mutate = select_mutation_shard(
             config.only_mutate,
