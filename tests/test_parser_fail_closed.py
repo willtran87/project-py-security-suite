@@ -196,6 +196,32 @@ class TruffleHogSuppressionTests(_TemporaryRoot):
 
 
 class NativeSuppressionFlagTests(_TemporaryRoot):
+    def test_bandit_run_decides_suite_status_on_the_real_target(self) -> None:
+        (self.root / "a.py").write_text("x = 1\n", encoding="utf-8")
+        observed: list[tuple[bool, Path]] = []
+
+        def fake_run(adapter: BanditAdapter, mirror: Path) -> object:
+            observed.append((adapter._suite_target, mirror))
+            return SimpleNamespace(findings=[])
+
+        for suite in (True, False):
+            with (
+                patch(
+                    "py_security_suite.adapters.bandit.is_suite_repository",
+                    return_value=suite,
+                ) as decided,
+                patch(
+                    "py_security_suite.adapters.base.ScannerAdapter.run",
+                    autospec=True,
+                    side_effect=fake_run,
+                ),
+                patch("py_security_suite.adapters.bandit.refine_literal_sql"),
+            ):
+                BanditAdapter(ToolConfig(), 4096).run(self.root)
+            decided.assert_called_once_with(self.root)
+        self.assertEqual([flag for flag, _ in observed], [True, False])
+        self.assertTrue(all(mirror != self.root for _, mirror in observed))
+
     def test_bandit_and_semgrep_ignore_inline_suppressions(self) -> None:
         self.assertIn(
             "--ignore-nosec",
