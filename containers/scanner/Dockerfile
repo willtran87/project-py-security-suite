@@ -2,7 +2,7 @@
 # Python policy: the scanner image deliberately runs the oldest supported
 # runtime (3.11) so the published `requires-python` floor is exercised end to
 # end; CI covers 3.11 through 3.14 separately. See docs/compatibility-matrix.md.
-FROM python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1 AS wheel-builder
+FROM python:3.15.1-slim-bookworm@sha256:575f8bc12ec26542e0678bc6b60e385218248019d433157ec327264a78c3a853 AS wheel-builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -18,7 +18,7 @@ COPY src /build/source/src
 RUN python -m pip wheel --no-deps --no-build-isolation --no-index \
     --wheel-dir /build/dist /build/source
 
-FROM python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1
+FROM python:3.15.1-slim-bookworm@sha256:575f8bc12ec26542e0678bc6b60e385218248019d433157ec327264a78c3a853
 
 ARG OSV_SCANNER_VERSION=2.3.8
 ARG OSV_SCANNER_LINUX_AMD64_DIGEST=bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
