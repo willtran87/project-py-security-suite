@@ -1,7 +1,5 @@
 # Cross-domain assurance
 
-Last reviewed: 2026-08-27
-
 Conventional SAST, dependency, IaC, and architecture scanners do not establish
 that product-specific invariants or specialized runtime domains were tested.
 Every scan therefore emits `domain-assurance.json` 1.0: a bounded applicability

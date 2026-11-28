@@ -126,6 +126,20 @@ wheels = [
 ]
 
 [[package]]
+name = "build"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "os_name == 'nt'" },
+    { name = "packaging" },
+    { name = "pyproject-hooks" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/67/4898a44ea4f3f8e213b0954ec0aa0a16971d62a6212d6ea3931e97115b99/build-1.6.1.tar.gz", hash = "sha256:51cc11666391ab6f092070437ac747002ff46f3e4113a3622177ee6b488bfc53", size = 113427, upload-time = "2026-09-10T07:56:00.417Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/9b/9fb3585dabcd73a1b2a6267f63f62649347c9e6d072c9fde365b105abb2c/build-1.6.1-py3-none-any.whl", hash = "sha256:ecd351a4be9d35a9eaaba244a7687143c9c7d4aea6ac964e7e7ddab20cbcf4e7", size = 31179, upload-time = "2026-09-10T07:55:59.148Z" },
+]
+
+[[package]]
 name = "cachecontrol"
 version = "0.14.4"
 source = { registry = "https://pypi.org/simple" }
@@ -378,6 +392,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/80/3f/bd97d3d9c613013d07cb7733d299385b41df37f0471310f5a73dc359f0b8/charset_normalizer-3.4.9-cp314-cp314t-win_amd64.whl", hash = "sha256:9b8e0f3107e2200b76f6054de99016eac3ee6762713587b36baaa7e4bd2ae177", size = 167620, upload-time = "2026-07-07T14:34:33.438Z" },
     { url = "https://files.pythonhosted.org/packages/3d/c6/eee9dca4439b1061f76373f06ea855678cc4a64c1c3c90b50e479edbb8eb/charset_normalizer-3.4.9-cp314-cp314t-win_arm64.whl", hash = "sha256:19ac87f93086ce37b86e098888555c4b4bc48102279bae3350098c0ed664b501", size = 158037, upload-time = "2026-07-07T14:34:35.018Z" },
     { url = "https://files.pythonhosted.org/packages/98/2b/f97f1c193fb855c345d678f5077d6926034db0722df74c8f057020e05a25/charset_normalizer-3.4.9-py3-none-any.whl", hash = "sha256:68e5f26a1ad57ded6d1cfb85331d1c1a195314756471d97758c48498bb4dcdf5", size = 64538, upload-time = "2026-07-07T14:34:56.993Z" },
+]
+
+[[package]]
+name = "check-manifest"
+version = "0.51"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "build" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/e3/8ce797dfdf12d447683490107c4dcd97bb2535d7a2b031bf3f3e4c441c3d/check_manifest-0.51.tar.gz", hash = "sha256:9801c7637675755a563f33e3c48ee59a59b37a7677297c05c910c16c5b9b6d67", size = 36302, upload-time = "2025-10-15T11:15:48.007Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/c1/df01ef6ba1c8a2bfc201be45d0889b06f165008b240e8d1657aa665421a8/check_manifest-0.51-py3-none-any.whl", hash = "sha256:f5f35ed561012fc2115bb070e42a748ac2e034cf8904ab4dfaae893859085ca4", size = 20500, upload-time = "2025-10-15T11:15:46.058Z" },
 ]
 
 [[package]]
@@ -1477,7 +1504,6 @@ wheels = [
 
 [[package]]
 name = "py-security-suite"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -1509,12 +1535,14 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "atheris", marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "check-manifest" },
     { name = "coverage", extra = ["toml"] },
     { name = "diff-cover" },
     { name = "hypothesis" },
     { name = "hypothesis-jsonschema" },
     { name = "mutmut" },
     { name = "mypy" },
+    { name = "packaging" },
     { name = "pip-audit" },
     { name = "pyfakefs" },
     { name = "pyright" },
@@ -1537,41 +1565,43 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = ">=50,<51" },
+    { name = "cryptography", specifier = ">=50,<60" },
     { name = "defusedxml", specifier = ">=0.7.1,<0.8" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "macholib", specifier = ">=1.16.4,<2" },
-    { name = "pefile", specifier = ">=2024.8.26,<2025" },
+    { name = "pefile", specifier = ">=2024.8.26,<2030" },
     { name = "psutil", specifier = ">=7.2,<8" },
-    { name = "pyelftools", specifier = ">=0.33,<0.34" },
+    { name = "pyelftools", specifier = ">=0.33,<1" },
     { name = "pypdf", specifier = ">=5,<7" },
     { name = "rfc3161ng", specifier = ">=2.1.3,<3" },
     { name = "rfc8785", specifier = ">=0.1.4,<1" },
     { name = "tree-sitter", specifier = ">=0.26,<0.27" },
-    { name = "tree-sitter-c", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-c-sharp", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-cpp", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-go", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-java", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-javascript", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-kotlin", specifier = ">=1.1,<1.2" },
-    { name = "tree-sitter-php", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-ruby", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-rust", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-swift", specifier = ">=0.7,<0.8" },
-    { name = "tree-sitter-typescript", specifier = ">=0.23,<0.24" },
-    { name = "wasmtime", specifier = ">=47,<49" },
+    { name = "tree-sitter-c", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-c-sharp", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-cpp", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-go", specifier = ">=0.25,<1" },
+    { name = "tree-sitter-java", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-javascript", specifier = ">=0.25,<1" },
+    { name = "tree-sitter-kotlin", specifier = ">=1.1,<2" },
+    { name = "tree-sitter-php", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-ruby", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-rust", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-swift", specifier = ">=0.7,<1" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23,<1" },
+    { name = "wasmtime", specifier = ">=47,<60" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "atheris", marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=3.1,<4" },
+    { name = "check-manifest", specifier = ">=0.51,<1" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10,<8" },
     { name = "diff-cover", specifier = ">=10.2,<11" },
     { name = "hypothesis", specifier = ">=6.140,<7" },
     { name = "hypothesis-jsonschema", specifier = ">=0.23,<0.24" },
     { name = "mutmut", specifier = ">=3.7,<4" },
     { name = "mypy", specifier = ">=1.17,<3" },
+    { name = "packaging", specifier = ">=24,<27" },
     { name = "pip-audit", specifier = ">=2.9,<3" },
     { name = "pyfakefs", specifier = ">=5.9,<7" },
     { name = "pyright", specifier = "==1.1.411" },
@@ -1701,6 +1731,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ab/bd/2f985c12bf33fdd8637e3a8f9418d6806f177601dee7c4924d0b2bb28650/pyproject_api-1.11.0.tar.gz", hash = "sha256:b8807d85a293e6c9f133e6575946fed45f1d42b22d58c780b33aa2421a799549", size = 23787, upload-time = "2026-07-21T13:09:33.744Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/6a/2822ee12bafe87af8f6cc620f7d1f126e77f82ce56ba888b94a9af5a979c/pyproject_api-1.11.0-py3-none-any.whl", hash = "sha256:860060c8832dce983b5eec6f41c4c43eb3ec06ff7332387a63acdf5ca27b68d8", size = 13275, upload-time = "2026-07-21T13:09:32.559Z" },
+]
+
+[[package]]
+name = "pyproject-hooks"
+version = "1.3.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/5d/f2ddeef4a855a102aaae5e97826a0260007522ab504421b75addfdb1517c/pyproject_hooks-1.3.3.tar.gz", hash = "sha256:defda19b854fa0d3bd4f76ea4ddcba8abd7dcfcdd585a6690ade050744fc5f43", size = 21013, upload-time = "2026-09-16T08:58:03.999Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/11/044d1ae1b4ec0d7af88ee5bc91e081be1022533032b906a7bdabdbb60977/pyproject_hooks-1.3.3-py3-none-any.whl", hash = "sha256:5fc53fdac9f7bd63fbcdc868fb5f90b4784d78a53a3d3388cd738b807441a20b", size = 10724, upload-time = "2026-09-16T08:58:02.96Z" },
 ]
 
 [[package]]
@@ -2218,6 +2257,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c3/5b/5e1c117ac84e3cefcf8d7a7f6b2461795a87e20869da065a5c087149060b/setproctitle-1.3.7-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:b1cac6a4b0252b8811d60b6d8d0f157c0fdfed379ac89c25a914e6346cf355a1", size = 12587, upload-time = "2025-09-05T12:51:21.195Z" },
     { url = "https://files.pythonhosted.org/packages/73/02/b9eadc226195dcfa90eed37afe56b5dd6fa2f0e5220ab8b7867b8862b926/setproctitle-1.3.7-pp311-pypy311_pp73-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:f1704c9e041f2b1dc38f5be4552e141e1432fba3dd52c72eeffd5bc2db04dc65", size = 14286, upload-time = "2025-09-05T12:51:22.61Z" },
     { url = "https://files.pythonhosted.org/packages/28/26/1be1d2a53c2a91ec48fa2ff4a409b395f836798adf194d99de9c059419ea/setproctitle-1.3.7-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:b08b61976ffa548bd5349ce54404bf6b2d51bd74d4f1b241ed1b0f25bce09c3a", size = 13282, upload-time = "2025-09-05T12:51:24.094Z" },
+]
+
+[[package]]
+name = "setuptools"
+version = "84.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/b3/c19426f783614d625699a4b247faf628ea9ab1db228674491767b417f9e1/setuptools-84.2.1.tar.gz", hash = "sha256:3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc", size = 1230289, upload-time = "2026-10-20T19:01:37.742Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl", hash = "sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2", size = 876263, upload-time = "2026-10-20T19:01:35.678Z" },
 ]
 
 [[package]]

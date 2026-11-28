@@ -9,6 +9,7 @@ import rfc8785
 
 
 _MAX_SAFE_INTEGER = (1 << 53) - 1
+_DEFAULT_MAXIMUM_BYTES = 512 * 1024 * 1024
 
 
 def loads(
@@ -17,8 +18,18 @@ def loads(
     maximum_depth: int = 64,
     maximum_nodes: int = 250_000,
     maximum_string_length: int = 1_048_576,
+    maximum_bytes: int = _DEFAULT_MAXIMUM_BYTES,
 ) -> Any:
-    """Decode bounded I-JSON, rejecting ambiguous or non-interoperable input."""
+    """Decode bounded I-JSON, rejecting ambiguous or non-interoperable input.
+
+    Every failure, including parser recursion exhaustion on deeply nested
+    input, is reported as ``ValueError`` so callers fail closed with a single
+    handler.
+    """
+    if maximum_bytes < 1:
+        raise ValueError("strict JSON limits must be positive")
+    if len(payload) > maximum_bytes:
+        raise ValueError("JSON document exceeds the byte limit")
 
     def pairs(values: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -43,13 +54,16 @@ def loads(
             raise ValueError("JSON number is not finite")
         return result
 
-    document = json.loads(
-        payload,
-        object_pairs_hook=pairs,
-        parse_constant=constant,
-        parse_int=integer,
-        parse_float=real,
-    )
+    try:
+        document = json.loads(
+            payload,
+            object_pairs_hook=pairs,
+            parse_constant=constant,
+            parse_int=integer,
+            parse_float=real,
+        )
+    except RecursionError as exc:
+        raise ValueError("JSON structure exceeds the parser nesting limit") from exc
     _validate_shape(
         document,
         maximum_depth=maximum_depth,
@@ -64,7 +78,7 @@ def canonical_bytes(value: object) -> bytes:
 
     _validate_shape(value)
     try:
-        return rfc8785.dumps(cast(Any, value))
+        return bytes(rfc8785.dumps(cast(Any, value)))
     except rfc8785.CanonicalizationError as exc:
         raise ValueError("value cannot be represented as RFC 8785 JSON") from exc
 
@@ -104,6 +118,8 @@ def _validate_shape(
         if isinstance(current, str):
             if len(current) > maximum_string_length:
                 raise ValueError("JSON string exceeds the length limit")
+            if _has_lone_surrogate(current):
+                raise ValueError("JSON string contains an unpaired surrogate")
         elif current is None or isinstance(current, bool):
             continue
         elif isinstance(current, int):
@@ -120,6 +136,15 @@ def _validate_shape(
             pending.extend((item, depth + 1) for item in current)
         else:
             raise ValueError(f"unsupported JSON value type: {type(current).__name__}")
+
+
+def _has_lone_surrogate(value: str) -> bool:
+    """Return whether ``value`` holds a code point that UTF-8 cannot encode."""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
 
 
 def _items(value: dict[str, object]) -> Iterable[object]:

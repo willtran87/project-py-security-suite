@@ -230,6 +230,10 @@ class IsolatedEnvironmentTests(unittest.TestCase):
                     return_value=None,
                 ),
                 patch("py_security_suite.execution._ENVIRONMENT_RUNTIME_CLOSURE", None),
+                patch(
+                    "py_security_suite.execution.site_directory_records",
+                    return_value=[],
+                ),
             ):
                 digest = python_runtime_closure_sha256(
                     str(root / "scanner-script.py"),

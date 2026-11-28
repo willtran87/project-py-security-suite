@@ -1,7 +1,5 @@
 # Offline companion assurance lanes
 
-Last reviewed: 2026-08-27
-
 The scanner process never imports or executes target application code. Tools
 that run tests, symbolic execution, fuzzers, a local service, build steps, or
 artifact verification execute in disposable companion lanes. Only bounded
@@ -302,7 +300,10 @@ The hardened contracts close the remaining authority and behavior gaps:
   constraints, issuance-time CRL snapshot, policy OID, and matching
   ESSCertIDv2. The root, policy, and authority must also be allowed by
   deployment-owned `PYSEC_TSA_ROOT_SHA256`, `PYSEC_TSA_POLICY_OIDS`, and
-  `PYSEC_TSA_AUTHORITIES`. Binding schema 3 additionally requires an RFC 3161
+  `PYSEC_TSA_AUTHORITIES`. An authority entry written as `name=<sha256>` is
+  bound to the DER SHA-256 of the trust anchor its path must reach. The signer
+  EKU must be critical and contain only `id-kp-timeStamping` (RFC 3161
+  section 2.3). Binding schema 3 additionally requires an RFC 3161
   countersignature over every accepted DSSE signature;
 - legacy RFC 3161 receipts are accepted only when their exact signer-certificate
   digest and authority are externally pinned in `PYSEC_TSA_SIGNER_SHA256` and

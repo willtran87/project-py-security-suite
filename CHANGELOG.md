@@ -1,5 +1,244 @@
 # Changelog
 
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) for published
+releases. Add new entries under `## [Unreleased]` using the `Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed`, and `Security` subsections; the release
+runbook ([docs/release-runbook.md](docs/release-runbook.md)) moves them under a
+versioned heading when a release is tagged.
+
+## [Unreleased]
+
+### Added
+
+- Apache-2.0 `LICENSE` with PEP 639 `license`/`license-files` metadata in the
+  wheel and sdist.
+- Scheduled weekly (and manually dispatchable) dependency audit of the root and
+  companion locks on `main`.
+- `check-manifest` and a strict distribution-metadata check in the CI quality
+  job, plus a release runbook describing the six-stage release chain.
+- Generated README count markers validated by
+  `scripts/validate_documentation_metrics.py`.
+
+### Changed
+
+- The sdist no longer ships the test suite; run tests from a repository
+  checkout.
+- The scanner image installs the suite from a wheel built with a hash-locked
+  build backend instead of running source through `PYTHONPATH`.
+- Pin the `setuptools` build backend exactly and widen over-tight runtime
+  upper bounds (`cryptography`, `pefile`, `pyelftools`, `wasmtime`, tree-sitter
+  grammars); `uv.lock` remains the reproducibility source.
+- Dependabot tracks the uv lock files and the scanner base image.
+- CI cancels only superseded pull request runs; release-path jobs run on pinned
+  `ubuntu-24.04` images.
+- PyPI publishing verifies the source release run's event, ref and `main`
+  ancestry in a job without OIDC permissions; a separate job holding only
+  `id-token: write` publishes the verified artifacts.
+- Rename hyphenated Python scripts to importable snake_case modules.
+- Bump Semgrep in the scanner image to 1.187.0.
+
+### Removed
+
+- Unused `security/api-surface-1.0.json` baseline and
+  `scripts/prepare-intelligence-snapshots.ps1`.
+- Hand-maintained "Last reviewed" dates in the documentation; use the Git
+  history of each page instead.
+
+### Security
+
+- **Containerized self-scan trust.** `scripts/run-self-scan.ps1` now sets
+  `PYSEC_SUITE_SELF_SCAN=1`, so the suite's governed detect-secrets exclusions
+  and reviewed inline `nosemgrep` pragmas still apply when the installed suite
+  and the mounted checkout live at different paths. Third-party targets keep
+  fail-closed suppression handling.
+- Python scanner runtime closures now stream each file's SHA-256 under a 1 GiB
+  per-file bound. Semgrep's 273 MB Linux engine exceeded the old 256 MiB
+  in-memory cap, which broke native Semgrep qualification.
+- **SARIF output contract change.** `results.sarif` rule descriptors are now
+  keyed by scanner rule and severity (`<tool>/<rule>/<severity>`), so GitHub
+  shows each alert at its own security severity instead of the first finding's.
+  Results also carry `properties.security-severity`. Expect a one-time re-key of
+  existing code-scanning alerts after upgrading.
+- SARIF stores the suite fingerprint under `partialFingerprints`
+  `pysecFingerprint/v1` instead of GitHub's reserved `primaryLocationLineHash`.
+- SARIF artifact URIs are RFC 3986 percent-encoded. Locations outside the
+  target, such as `<outside-target>`, absolute paths or `..` traversal, are
+  omitted instead of being published as placeholders.
+- Escape scanner text in SARIF `help.markdown` and bracket link syntax in
+  `message.text`, so scanner output cannot inject Markdown links or images.
+- Emit findings suppressed by governed risk acceptance in SARIF with an
+  `external`/`accepted` suppression and justification. Previously they were
+  dropped, which made GitHub close them as fixed.
+- Escape `|` in Markdown text and code cells so scanner text cannot split
+  tables in reports and `GITHUB_STEP_SUMMARY`.
+- Judge trusted-time quorum independence on normalized authority names, trust
+  anchor, signer SPKI and certificate fingerprints, not evidence file bytes.
+  `PYSEC_TSA_AUTHORITIES` entries may bind a name to its trust-anchor
+  certificate as `name=<sha256>`. Quorum members must be bound, and bound names
+  must chain to that anchor.
+- Require the RFC 3161 TSA signer EKU to be critical and contain only
+  `id-kp-timeStamping` (RFC 3161 section 2.3).
+- Reject TSA certificates revoked for key or CA compromise, or with an
+  unspecified or absent reason, whatever the revocation date. Accept revocation
+  snapshots published after issuance so a later compromise is detected.
+- Reject governance authority keys once verification time reaches
+  `revoked_at`, so a revoked key cannot pass by backdating `signed_at`.
+- Close policy fail-open paths. `policy.required_scanners` now extends the
+  profile's required scanners instead of replacing them. An organization
+  `profile` is a floor that repository configuration and `--profile` can only
+  raise. Production/release risk-acceptance ledgers need an organization-pinned
+  `risk_acceptance_sha256`, and acceptances can declare `max_severity` and
+  `known_exploited`: re-rated or newly known-exploited findings stay active, and
+  KEV findings are never suppressed in production/release. `INCOMPLETE` reasons
+  include the blocking-finding count, `unknown` severity blocks in
+  production/release, `--diagnostic-without-isolation` always yields
+  `INCOMPLETE`, `incomplete_is_blocking = false` is rejected, and boolean
+  settings must be TOML booleans.
+
+## Pre-release development history
+
+No version has been tagged or published yet. The entries below are the
+unversioned development log recorded before this changelog adopted the Keep a
+Changelog format. They are preserved verbatim, newest first, and are not
+grouped by release.
+
+### Development log
+
+- Isolate validator and child-process bytecode caches, rejecting stale reports and
+  preserving exact wheel receipts and report bytes in unique archives.
+- Checkpoint native regressions, benchmark engines and runtime qualification;
+  expose runtime identity-check costs separately from native scan time.
+- Resolve Flask hook receivers to their native import calls, require matching
+  literal module identities and reject observed hook rebinding and overrides.
+- Add a versioned evidence aggregator that recalculates benchmark counts, checks
+  protected detections and generates documentation without hiding failed accuracy.
+- Add adversarial cache, stale-report, disk-full and concurrent-archive tests, and
+  document the remaining independent evaluation and deployment measurements.
+
+- Add native CodeQL HTML response detection for bounded dynamic Flask registration
+  hooks, with operand-aware Markup escaping and adversarial reassignment controls.
+- Validate benchmark and acceptance runs against exact installed-wheel bytes
+  before and after execution; require strict accuracy on the release builder wheel.
+- Retain atomic acceptance checkpoints, completed cases and bounded normalized
+  fixture reports in distinct run archives, including failed and interrupted runs.
+- Qualify Semgrep with its own isolated interpreter and runtime closure. Correct
+  Windows Python DLL resolution and record sampled native memory and scratch use.
+- Reject invalid bundle qualification limits before repository inventory; extract
+  platform runtime identity helpers and tighten the execution module size ratchet.
+- Document validation and release boundaries with updated Mermaid diagrams.
+
+- Track LDAP filter injection through source-verified imported connection factories,
+  including module imports outside request handlers. Preserve native source-to-sink
+  paths, filter escaping, receiver identity and upstream finding deduplication.
+- Extend native constant-value proofs to bounded string-match branches and closed
+  local append/pop sequences. Keep unsafe mutation gaps explicit in a separate
+  proof-rejection corpus, and force supplemental query reevaluation to prevent
+  stale cached diagnostics after query changes.
+
+- Extend native CodeQL path/XPath comparisons to direct assignments in provably
+  unreachable `if` branches. Preserve live and uncertain flows, with 20 new
+  detector cases and installed-package controls for complete and partial scans.
+
+- Add bounded LDAP filter detection for directly constructed ldap3 connections
+  and unsafe HTML marking of direct Flask request reads. Include 39 native
+  positive/negative controls and installed-wheel checks for both rules.
+- Fix Semgrep parallelism at two workers across product and qualification scans.
+  Bind repeatability evidence to Python source contents, rules and launcher bytes;
+  retain every attempt and gate the public corpus on three fixed repetitions.
+
+- Refine CodeQL path and XPath conditional-expression flows with explicit native
+  comparisons against the original queries. Require complete analysis and exact
+  source coordinates; retain resolved, redacted original alerts and comparison
+  evidence. Add arithmetic, reassignment, closure, and competing-flow controls.
+
+- Refine Semgrep path analysis for provably unreachable branches and preserve
+  taint through identity/string-conversion list comprehensions. Model simple-name
+  secure-filename arguments without clearing other input uses or nested sinks.
+- Repeat native Semgrep regression scans three times by default, retaining every
+  attempt and failing on incomplete coverage or normalized-finding drift. Extend
+  installed-package checks with safe and vulnerable path-flow controls.
+
+- Treat Semgrep dataflow fixpoint timeouts in profiling metadata as incomplete
+  analysis even when native exit status is zero and the main error list is empty.
+  Retain valid findings, reject malformed timeout metadata, and prevent affected
+  benchmark runs from passing the completion gate.
+
+- Add precise weak-hash detection for hashlib constructors and explicitly
+  insecure cookies on Flask, Django, Starlette, and FastAPI response objects.
+  Track response aliases and reassignment, preserve non-security hash intent,
+  and verify secure alternatives with real detector and installed-package tests.
+- Protect individual previously detected benchmark cases so unchanged aggregate
+  counts cannot conceal lost detections. Keep the independent accuracy policy.
+
+- Require the project accuracy policy before independent release builds, using
+  one reusable benchmark workflow for CI and release assurance.
+- Stabilize all bundled Semgrep rule identities across rule/source relocation,
+  with real-adapter and installed-wheel acceptance checks.
+- Attach bounded constant-argument review evidence to eligible CodeQL path and
+  XPath findings while retaining every native alert and its original severity.
+  Add adversarial regression cases and real XPath acceptance controls.
+
+- Add three-engine Python source-security benchmark measurement with case-level
+  evidence, explicit project accuracy targets, and an enforceable readiness gate.
+  Preserve exact CWE scoring and distinguish regression success from accuracy.
+- Detect request headers/cookies flowing to SQL, paths, and constructed
+  requests/httpx/aiohttp clients, with positive and negative detector regressions.
+- Reconcile CodeQL extraction diagnostics against source inventory, retain
+  findings on partial analysis, and handle large native SARIF with dedicated
+  bounded parsing. Extend installed acceptance to unavailable scanners and
+  CodeQL syntax-error coverage; retain per-scenario timings.
+- Bind omitted native CodeQL source roots to the generated database's mirror,
+  restore finding and trace locations, and canonicalize zero-padded CWE numbers
+  without changing category semantics. Reject unresolved benchmark attribution.
+
+- Add installed-wheel acceptance through the public scan command and report
+  verification, including CodeQL path evidence and partial-result behavior.
+- Reconcile Bandit/Semgrep Python file inventories and expose complete, partial,
+  or unknown analysis coverage without retaining source paths in diagnostics.
+- Share sealed CodeQL dependencies across analysis stages, bound SARIF/source
+  reads, and account for preparation in cooperative scan deadlines.
+- Add a revision- and digest-pinned external OWASP Python benchmark with per-CWE
+  confusion matrices, confidence intervals, and regression ceilings. Public
+  benchmark success does not grant production approval.
+
+- Remove name-based taint sanitizer exemptions and add Flask, Django, and FastAPI
+  request-to-SQL, SSRF, and path-traversal rules. Retain native scanner coverage
+  errors alongside valid findings. Add a locked CodeQL global credential-to-log
+  query, stage approved query caches inside the private runner home, and preserve
+  primary findings if supplemental analysis fails. Require real-detector positive
+  and negative regression gates with per-CWE results and SARIF path evidence.
+
+- Stream source and Git-history snapshot copies in bounded chunks, honor stop
+  requests during initial traversal and hashing, and preserve mandatory final
+  integrity verification. Report only the first schema violation using trusted
+  schema metadata, excluding rejected values and property names. Deliver progress
+  asynchronously with bounded buffering and shutdown so callback failures or
+  slow consumers cannot change scan outcomes.
+
+- Contain bounded-helper descendants through parent exit using gated Windows
+  Job Objects and POSIX process groups. Keep published reports successful when
+  cleanup fails, stream recovery input serialization, and remove duplicate model
+  deep copies. Preserve distinct interruption causes, report actual adapter
+  outcomes and failure durations, and stop optional enrichment between stages.
+
+- Enforce subprocess deadlines during blocked stdin delivery, retain nested
+  scan deadlines and memory limits, and bound shared Python parsing and AST
+  literal storage. Preserve private, checksummed report-input checkpoints on
+  rendering failure and add `pysec recover-report`. Add complete-scan scaling
+  benchmarks with fresh-process samples, stage timings, RSS and artifact-size
+  budgets, cancellation latency, and retained CI results.
+
+- Reject silently coerced numeric configuration, duplicate adapter artifact
+  producers, and incomplete dependency inventories. Add versioned manifest-limit
+  accounting with historical schema support, scan-wide cooperative deadlines,
+  graceful Ctrl+C, and optional secret-free progress events. Reuse bounded
+  snapshot-local ASTs, dependency identities, and source excerpts; extract typed
+  scanner scheduling and replay-governance stages and tighten architecture limits.
+
 - Make scheduled deep assurance reproducible and actionable: acquire the mutable
   OSV publisher snapshot in a bounded connected preparation step, seal its exact
   bytes and provenance, independently rehash it before exposing a narrow named
@@ -653,10 +892,7 @@
   site with pinned workflow actions, exact direct build dependencies, dark-mode
   support, Mermaid diagrams, source links, and deployment-safe navigation.
 
-All notable changes are documented here. The project follows semantic versioning
-for published releases.
-
-## Unreleased
+### Initial pre-release notes
 
 - Gate scanner launch on successful OS quota assignment; add active isolation
   canaries, Windows held-handle path traversal, mTLS monotonic governance replay
@@ -1493,7 +1729,7 @@ for published releases.
 - Decomposed HTML report assembly from Radon rank D to rank A while preserving
   the offline single-file artifact and strict content-security policy.
 
-### Added
+#### Added
 
 - Offline-first orchestration for 62 governed security, supply-chain, quality,
   architecture, test-assurance, repository-health, and artifact perspectives.
@@ -1506,7 +1742,7 @@ for published releases.
 - Complete source distributions containing governance, schemas, operational
   scripts, examples, locked companion metadata, and test sources.
 
-### Security
+#### Security
 
 - Target and scanner before/after integrity checks, bounded output and parsing,
   path and symlink defenses, sanitized diagnostics, secret-context redaction,
@@ -1516,7 +1752,7 @@ for published releases.
 - Security Passport publication is failure-atomic: signing failures preserve
   existing evidence and discard incomplete staging directories.
 
-### Performance
+#### Performance
 
 - Maintained-file discovery prunes generated and tool-owned directories before
   traversal, materially reducing comprehensive preflight and scan duration.
@@ -1528,3 +1764,5 @@ for published releases.
   only authenticated source-bound companion evidence with control proofs. The
   proposal validator never authorizes execution, and confirmed defects require
   an exact binding to the failed control-ledger case.
+
+[Unreleased]: https://github.com/willtran87/project-py-security-suite/commits/main

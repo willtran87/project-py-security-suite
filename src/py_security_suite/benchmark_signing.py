@@ -75,13 +75,15 @@ class LocalEd25519SigningProvider:
         return hashlib.sha256(self.public_key_bytes()).hexdigest()
 
     def public_key_bytes(self) -> bytes:
-        return self.private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
+        return bytes(
+            self.private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
         )
 
     def sign(self, payload: bytes) -> bytes:
-        return self.private_key.sign(payload)
+        return bytes(self.private_key.sign(payload))
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,6 @@ import argparse
 import base64
 from contextlib import contextmanager
 import hashlib
-import math
 import os
 import ssl
 import sqlite3
@@ -32,6 +31,13 @@ from .version import __version__
 from .assurance_profile import enforce_assurance_profile, load_assurance_profile
 from .control_proof import verify_control_proof
 from .inventory import source_snapshot
+from .evidence_values import (
+    _coverage_summary,
+    _finite_total,
+    _integer,
+    _number,
+    _optional_integer,
+)
 from .strict_json import canonical_bytes, dumps as strict_dumps, loads as strict_loads
 from .trusted_time import verify_rfc3161
 from .trusted_observation import governed_now
@@ -39,6 +45,7 @@ from .trusted_observation import governed_now
 _MAX_REPORT_BYTES = 64 * 1024 * 1024
 _MAX_JUNIT_REPORTS = 128
 _MAX_JUNIT_TEST_CASES = 100_000
+_MAX_JUNIT_FAILURES = 10_000
 _ASSURANCE_KINDS = frozenset(
     {
         "atheris",
@@ -194,10 +201,11 @@ def main(argv: list[str] | None = None) -> int:
                 assurance_profile=args.assurance_profile,
                 require_assurance_profile=args.require_assurance_profile,
             )
+        output = strict_dumps(document)
     except (OSError, TypeError, ValueError, DefusedXmlException) as exc:
         print(f"invalid {args.kind} evidence: {exc}", file=sys.stderr)
         return 2
-    sys.stdout.write(strict_dumps(document) + "\n")
+    sys.stdout.write(output + "\n")
     return 0
 
 
@@ -1033,19 +1041,6 @@ def _coverage_document(path: Path) -> dict[str, Any]:
     )
 
 
-def _coverage_summary(value: dict[str, Any]) -> dict[str, int | float]:
-    return {
-        "covered_lines": _integer(value.get("covered_lines")),
-        "num_statements": _integer(value.get("num_statements")),
-        "percent_covered": _number(value.get("percent_covered")),
-        "missing_lines": _integer(value.get("missing_lines")),
-        "num_branches": _integer(value.get("num_branches")),
-        "covered_branches": _integer(value.get("covered_branches")),
-        "missing_branches": _integer(value.get("missing_branches")),
-        "num_partial_branches": _integer(value.get("num_partial_branches")),
-    }
-
-
 def _junit_document(path: Path) -> dict[str, Any]:
     reports = _junit_paths(path)
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "time": 0.0}
@@ -1066,12 +1061,21 @@ def _junit_document(path: Path) -> dict[str, Any]:
             node for node in root.iter() if _local_name(node.tag) == "testcase"
         ):
             totals["tests"] += 1
-            totals["time"] += _number(case.attrib.get("time"))
+            totals["time"] = _finite_total(
+                totals["time"] + _number(case.attrib.get("time"))
+            )
+            # A failure or error outranks a skip: a case reporting both
+            # <skipped/> and <failure/> must never be counted as skipped.
+            outcomes = {
+                _local_name(child.tag): child
+                for child in reversed(list(case))
+                if _local_name(child.tag) in {"failure", "error", "skipped"}
+            }
             result = next(
                 (
-                    child
-                    for child in case
-                    if _local_name(child.tag) in {"failure", "error", "skipped"}
+                    outcomes[kind]
+                    for kind in ("failure", "error", "skipped")
+                    if kind in outcomes
                 ),
                 None,
             )
@@ -1092,7 +1096,11 @@ def _junit_document(path: Path) -> dict[str, Any]:
             }
             if len(test_cases) < _MAX_JUNIT_TEST_CASES:
                 test_cases.append(case_record)
-            if result is not None and result_type != "skipped":
+            if (
+                result is not None
+                and result_type != "skipped"
+                and len(failures) < _MAX_JUNIT_FAILURES
+            ):
                 failures.append(
                     {
                         "report": str(report.resolve()),
@@ -1108,6 +1116,9 @@ def _junit_document(path: Path) -> dict[str, Any]:
             "report_count": len(reports),
             "totals": totals,
             "failures": failures,
+            "failure_inventory_complete": (
+                totals["failures"] + totals["errors"] <= _MAX_JUNIT_FAILURES
+            ),
             "test_cases": test_cases,
             "test_case_inventory_complete": totals["tests"] <= _MAX_JUNIT_TEST_CASES,
         },
@@ -1682,9 +1693,7 @@ def _exclusive_state_lock(path: Path) -> Any:
     lock_path = path.with_name(f".{path.name}.lock")
     handle = lock_path.open("a+b")
     os.chmod(lock_path, 0o600)  # noqa: S103 - private replay checkpoint lock
-    if lock_path.stat().st_size == 0:
-        handle.write(b"0")
-        handle.flush()
+    # Byte-range locks may cover EOF; writing before locking races on Windows.
     deadline = time.monotonic() + 10.0
     acquired = False
     try:
@@ -2448,27 +2457,6 @@ def _junit_paths(path: Path) -> list[Path]:
     if len(reports) > _MAX_JUNIT_REPORTS:
         raise ValueError(f"more than {_MAX_JUNIT_REPORTS} JUnit reports were found")
     return reports
-
-
-def _integer(value: object) -> int:
-    try:
-        return int(str(value or 0))
-    except (TypeError, ValueError) as exc:
-        raise TypeError(f"expected an integer, received {value!r}") from exc
-
-
-def _optional_integer(value: object) -> int | None:
-    return None if value in (None, "") else _integer(value)
-
-
-def _number(value: object) -> float:
-    try:
-        result = round(float(str(value or 0.0)), 6)
-    except (TypeError, ValueError) as exc:
-        raise TypeError(f"expected a number, received {value!r}") from exc
-    if not math.isfinite(result):
-        raise TypeError(f"expected a finite number, received {value!r}")
-    return result
 
 
 def _integer_list(value: object) -> list[int]:

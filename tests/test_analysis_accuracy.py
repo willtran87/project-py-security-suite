@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -25,20 +26,73 @@ from py_security_suite.models import (
     ValidationStatus,
 )
 from py_security_suite.strict_json import canonical_bytes
-from py_security_suite.static_architecture import analyze_static_architecture
+from py_security_suite.static_architecture import _imports, analyze_static_architecture
 
 
 def test_framework_import_without_manifest_is_fail_visible(tmp_path: Path) -> None:
     source = tmp_path / "app.py"
     source.write_text("from fastapi import FastAPI\n", encoding="utf-8")
+    generated = tmp_path / "mutants" / "generated.py"
+    generated.parent.mkdir()
+    generated.write_text("from flask import Flask\n", encoding="utf-8")
 
     findings, artifact = framework_model_coverage(
         tmp_path, [_run("semgrep", ToolStatus.COMPLETED)], []
     )
 
     assert artifact["frameworks_detected"] == 1
+    assert artifact["frameworks"][0]["framework"] == "fastapi"
     assert artifact["complete"] is False
     assert findings[0].sources[0].tool == "framework-model-coverage"
+
+
+def test_repository_framework_models_are_digest_bound_and_canary_qualified() -> None:
+    # Mutation runners copy the test module and execute from a synthetic
+    # ``mutants`` directory. Find the governed project boundary from the current
+    # execution tree instead of coupling this test to either ``__file__`` or an
+    # assumed working directory.
+    working_directory = Path.cwd().resolve()
+    repository = next(
+        (
+            candidate
+            for candidate in (working_directory, *working_directory.parents)
+            if (candidate / ".pysec-models.json").is_file()
+        ),
+        None,
+    )
+    assert repository is not None, "unable to locate the governed model manifest"
+    grpc = _finding("semgrep")
+    grpc.finding_id = "grpc-canary"
+    grpc.sources[0].rule_id = "python.grpc-insecure-channel"
+    grpc.locations = [
+        Location(path="security/framework-canaries/grpc-positive.py", start_line=8)
+    ]
+    psycopg = _finding("semgrep")
+    psycopg.finding_id = "psycopg-canary"
+    psycopg.sources[0].rule_id = "python.psycopg-sql-composition"
+    psycopg.locations = [
+        Location(path="security/framework-canaries/psycopg-positive.py", start_line=8)
+    ]
+
+    findings, artifact = framework_model_coverage(
+        repository,
+        [_run("semgrep", ToolStatus.COMPLETED)],
+        [grpc, psycopg],
+    )
+
+    assert findings == []
+    assert artifact["complete"] is True
+    assert artifact["frameworks_detected"] == 2
+    assert artifact["frameworks_modeled"] == 2
+    assert all(
+        not item["path"].startswith("mutants/")
+        for record in artifact["frameworks"]
+        for item in record["imports"]
+    )
+    assert artifact["qualified_canary_finding_ids"] == [
+        "grpc-canary",
+        "psycopg-canary",
+    ]
 
 
 def test_framework_manifest_requires_bound_canaries_and_completed_engine(
@@ -1243,6 +1297,39 @@ def test_static_architecture_unifies_packaging_main_and_tach_policy(
         item["symbol"] == "sample.cli.main" for item in artifact["entrypoint_symbols"]
     )
     validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_static_architecture_resolves_relative_submodule_import_precisely(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (package / "feature.py").write_text(
+        "from . import helper\nVALUE = helper.VALUE\n", encoding="utf-8"
+    )
+    (tmp_path / "tach.toml").write_text(
+        'source_roots = ["src"]\nroot_module = "forbid"\n'
+        "forbid_circular_dependencies = true\n"
+        '[[modules]]\npath = "sample.feature"\n'
+        'depends_on = ["sample.helper"]\n'
+        '[[modules]]\npath = "sample.helper"\ndepends_on = []\n',
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_static_architecture(tmp_path)
+
+    assert artifact["policy_violations"] == []
+    assert not any(
+        finding.classifications == ["ARCH-POLICY-VIOLATION"] for finding in findings
+    )
+
+
+def test_static_architecture_resolves_relative_star_import_to_base_module() -> None:
+    tree = ast.parse("from .helper import *\n")
+
+    assert _imports("sample.feature", False, tree) == {"sample.helper"}
 
 
 def test_application_contracts_emit_argv_safe_execution_handoff(

@@ -1,7 +1,5 @@
 # Security Passport, intelligence, and lifecycle evidence
 
-Last reviewed: 2026-08-07
-
 ## Objective
 
 The Security Passport turns a scan directory into portable release evidence.

@@ -3,11 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..command_environment import reject_configured_code_variables
 from ..config import ToolConfig
+from ..executable_pin import PinnedExecutable, pin_executable, windows_image_error
 from ..execution import (
     CommandEnvironment,
     RawExecution,
@@ -47,6 +50,7 @@ class ScannerReadiness:
 class ScannerAdapter(ABC):
     name: str
     accepted_exit_codes: frozenset[int] = frozenset({0})
+    partial_exit_codes: frozenset[int] = frozenset()
 
     def __init__(self, config: ToolConfig, max_output_bytes: int) -> None:
         self.config = config
@@ -73,6 +77,7 @@ class ScannerAdapter(ABC):
 
     def execution_environment(self) -> CommandEnvironment:
         environment = self.environment()
+        reject_configured_code_variables(dict(self.config.trust_environment))
         environment.extra.update(self.config.trust_environment)
         if self.config.trust_policy_sha256:
             environment.extra["PYSEC_TRUST_POLICY_SHA256"] = (
@@ -103,6 +108,17 @@ class ScannerAdapter(ABC):
         raise NotImplementedError
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
+        return {}
+
+    def analysis_coverage(self, payload: str) -> dict[str, int]:
+        return {}
+
+    def coverage_inventory(self, target: Path) -> tuple[str, ...] | None:
+        return None
+
+    def coverage_assessment(
+        self, payload: str, target: Path, expected: tuple[str, ...]
+    ) -> dict[str, object]:
         return {}
 
     def result_payload(self, execution: RawExecution) -> str:
@@ -181,17 +197,69 @@ class ScannerAdapter(ABC):
                 diagnostic=self._diagnostic(tool_run, None),
             )
 
+    def _pin_executable(
+        self, stack: ExitStack, executable: str
+    ) -> tuple[PinnedExecutable | None, str | None]:
+        """Hold the approved executable from digest check through execution."""
+        path = self._executable_path or Path(executable)
+        if not path.is_file():
+            # Nothing to hold: launch fails, and the post-run digest check
+            # rejects anything created at this path meanwhile.
+            return None, None
+        try:
+            pinned = stack.enter_context(pin_executable(path))
+        except (OSError, ValueError) as exc:
+            return None, f"scanner executable could not be pinned: {exc}"
+        if self._executable_sha256 is not None and (
+            pinned.sha256 != self._executable_sha256
+        ):
+            self._executable_unchanged = False
+            return None, "scanner executable changed before execution"
+        return pinned, None
+
     def _run_ready(self, target: Path, executable: str) -> AdapterResult:
+        expected_files = self.coverage_inventory(target)
         command = self.build_command(executable, target)
-        version = self._detect_version(executable, target)
-        execution = run_command(
-            command,
-            cwd=target,
-            timeout_seconds=self.config.timeout_seconds,
-            max_output_bytes=self.max_output_bytes,
-            environment=self.execution_environment(),
+        with ExitStack() as stack:
+            pinned, pin_error = self._pin_executable(stack, executable)
+            if pin_error:
+                tool_run = ToolRun(
+                    tool=self.name,
+                    status=ToolStatus.FAILED,
+                    command=command,
+                    duration_seconds=0.0,
+                    error=pin_error,
+                    **self._integrity_fields(),
+                )
+                return AdapterResult(
+                    findings=[],
+                    tool_run=tool_run,
+                    diagnostic=self._diagnostic(tool_run, None),
+                )
+            version = self._detect_version(executable, target)
+            # Scanners keep the target as cwd: several (tach, ruff, gitleaks)
+            # discover their project configuration from it. Executables are
+            # absolute, PATHEXT excludes batch files and
+            # NoDefaultCurrentDirectoryInExePath stops helper lookups in cwd.
+            execution = run_command(
+                command,
+                cwd=target,
+                timeout_seconds=self.config.timeout_seconds,
+                max_output_bytes=self.max_output_bytes,
+                environment=self.execution_environment(),
+            )
+            replaced = pinned is not None and not pinned.unchanged()
+        if replaced:
+            self._executable_unchanged = False
+        changed_error = (
+            ("scanner executable was replaced or modified during execution")
+            if replaced
+            else (
+                self._executable_changed_error()
+                or self._asset_changed_error()
+                or self._containment_error(execution)
+            )
         )
-        changed_error = self._executable_changed_error() or self._asset_changed_error()
         if changed_error:
             tool_run = self._tool_run(
                 execution,
@@ -204,11 +272,12 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
-        if execution.timed_out:
+        if execution.timed_out or execution.stop_reason:
             tool_run = self._tool_run(
                 execution,
-                ToolStatus.TIMED_OUT,
-                error=f"timed out after {self.config.timeout_seconds} seconds",
+                ToolStatus.TIMED_OUT if execution.timed_out else ToolStatus.FAILED,
+                error=execution.stop_reason
+                or f"timed out after {self.config.timeout_seconds} seconds",
                 version=version,
             )
             return AdapterResult(
@@ -261,7 +330,10 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
-        if execution.exit_code not in self.accepted_exit_codes:
+        if (
+            execution.exit_code
+            not in self.accepted_exit_codes | self.partial_exit_codes
+        ):
             tool_run = self._tool_run(
                 execution,
                 ToolStatus.FAILED,
@@ -277,6 +349,12 @@ class ScannerAdapter(ABC):
             payload = self.result_payload(execution)
             findings = self.parse(payload, target)
             artifacts = self.derived_artifacts(payload, target)
+            coverage = self.analysis_coverage(payload)
+            assessment = (
+                self.coverage_assessment(payload, target, expected_files)
+                if expected_files is not None
+                else {}
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             tool_run = self._tool_run(
                 execution,
@@ -295,16 +373,27 @@ class ScannerAdapter(ABC):
                 if source.tool == self.name and source.version == "unknown":
                     source.version = version
 
+        partial = (
+            any(coverage.values())
+            or execution.exit_code in self.partial_exit_codes
+            or (bool(assessment) and assessment.get("state") != "complete")
+        )
         tool_run = self._tool_run(
             execution,
-            ToolStatus.COMPLETED,
+            ToolStatus.PARSE_ERROR if partial else ToolStatus.COMPLETED,
             finding_count=len(findings),
             version=version,
+            error="scanner analysis incomplete; valid findings retained"
+            if partial
+            else None,
         )
         return AdapterResult(
             findings=findings,
             tool_run=tool_run,
-            diagnostic=self._diagnostic(tool_run, execution),
+            diagnostic={
+                **self._diagnostic(tool_run, execution),
+                "analysis_coverage": {**coverage, **assessment},
+            },
             artifacts=artifacts,
         )
 
@@ -323,6 +412,10 @@ class ScannerAdapter(ABC):
                 reason=not_applicable,
             )
         prerequisite = self.prerequisite_error()  # pylint: disable=assignment-from-none
+        try:
+            reject_configured_code_variables(dict(self.config.trust_environment))
+        except ValueError as exc:
+            prerequisite = prerequisite or str(exc)
         if prerequisite:
             return ScannerReadiness(
                 tool=self.name,
@@ -372,6 +465,9 @@ class ScannerAdapter(ABC):
         finding_count: int = 0,
         version: str = "unknown",
     ) -> ToolRun:
+        if execution.stop_reason:
+            status = ToolStatus.TIMED_OUT if execution.timed_out else ToolStatus.FAILED
+            error = execution.stop_reason
         return ToolRun(
             tool=self.name,
             status=status,
@@ -391,6 +487,9 @@ class ScannerAdapter(ABC):
         if executable is None:
             return None, f"executable not found: {self.config.executable}"
         path = Path(executable).resolve()
+        image_error = windows_image_error(path) if path.is_file() else None
+        if image_error:
+            return None, image_error
         try:
             digest = sha256_file(path)
         except OSError:
@@ -445,6 +544,21 @@ class ScannerAdapter(ABC):
                 )
         return str(path), None
 
+    @staticmethod
+    def _containment_error(execution: RawExecution) -> str | None:
+        """A run that never launched or lacked its containment has no result."""
+        if execution.launch_error:
+            return sanitize_diagnostic(execution.launch_error, maximum=600)
+        if execution.resource_limit_errors:
+            detail = sanitize_diagnostic(
+                "; ".join(execution.resource_limit_errors), maximum=400
+            )
+            return f"scanner resource containment was not enforced: {detail}"
+        return None
+
+    def _asset_check(self) -> None:
+        return None
+
     def _prepare_assets(self) -> str | None:
         self._asset_digests = {}
         self._asset_unchanged = {}
@@ -463,7 +577,9 @@ class ScannerAdapter(ABC):
             ):
                 return "production scanner asset digests lack organization approval"
             try:
-                observed = governed_asset_sha256(path)
+                observed = governed_asset_sha256(path, check=self._asset_check)
+            except TimeoutError:
+                raise
             except (OSError, TypeError, ValueError) as exc:
                 return f"scanner {label} asset could not be hashed: {exc}"
             self._asset_digests[label] = observed

@@ -12,6 +12,18 @@ from typing import Any
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
+from .config_numbers import (
+    integer_setting,
+    real_setting,
+    execution_limits,
+    protect_scan_deadline,
+)
+from .config_policy_floor import (
+    isolation_settings_error,
+    policy_settings_error,
+    profile_floor_error,
+    risk_acceptance_authority_error,
+)
 from .models import Severity
 from .path_safety import read_regular_file
 from .trust_policy import (
@@ -414,6 +426,8 @@ class IsolationConfig:
 class ExecutionConfig:
     max_workers: int = 4
     max_output_bytes: int = 16 * 1024 * 1024
+    max_scan_seconds: int = 0
+    max_scan_memory_bytes: int = 0
 
 
 @dataclass(slots=True)
@@ -569,13 +583,12 @@ class SuiteConfig:
 
     @property
     def required_tools(self) -> tuple[str, ...]:
-        return self.policy.required_scanners or self.selected_tools
+        return _required_tools(self.profile, self.policy.required_scanners)
 
 
 def _default_mapping() -> dict[str, Any]:
-    bundled_rules = Path(
-        str(files("py_security_suite").joinpath("rules/python-security.yml"))
-    )
+    rule_resources = files("py_security_suite").joinpath("rules")
+    bundled_rules = Path(str(rule_resources.joinpath("python-security.yml")))
     bundled_gitleaks = Path(
         str(files("py_security_suite").joinpath("rules/gitleaks.toml"))
     )
@@ -882,6 +895,7 @@ def _default_mapping() -> dict[str, Any]:
                 "enabled": True,
                 "executable": "run-codeql",
                 "timeout_seconds": 1800,
+                "rules_path": str(bundled_rules.parent / "codeql"),
                 "database_path": None,
                 "auxiliary_executable": "codeql",
             },
@@ -1262,7 +1276,12 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "sandbox_arguments",
             "replay_ledger_path",
         },
-        "execution": {"max_workers", "max_output_bytes"},
+        "execution": {
+            "max_workers",
+            "max_output_bytes",
+            "max_scan_seconds",
+            "max_scan_memory_bytes",
+        },
         "policy": {
             "required_scanners",
             "block_severities",
@@ -1388,12 +1407,18 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
 def _reject_weaker_repository_policy(
     organization: Mapping[str, Any], repository: Mapping[str, Any]
 ) -> None:
-    _reject_weaker_isolation(
-        organization.get("isolation", {}), repository.get("isolation", {})
-    )
-    _reject_weaker_policy_settings(
-        organization.get("policy", {}), repository.get("policy", {})
-    )
+    try:
+        protect_scan_deadline(
+            organization.get("execution", {}), repository.get("execution", {})
+        )
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
+    for section, check in (
+        ("isolation", isolation_settings_error),
+        ("policy", policy_settings_error),
+    ):
+        if error := check(organization.get(section, {}), repository.get(section, {})):
+            raise ConfigurationError(error)
     _reject_weaker_evidence_settings(
         organization.get("intelligence", {}),
         repository.get("intelligence", {}),
@@ -1439,75 +1464,6 @@ def _reject_weaker_repository_policy(
     _reject_weaker_tool_settings(
         organization.get("tools", {}), repository.get("tools", {})
     )
-
-
-def _reject_weaker_isolation(
-    organization: Mapping[str, Any], repository: Mapping[str, Any]
-) -> None:
-    if (
-        organization.get("network") == "deny"
-        and repository.get("network", "deny") != "deny"
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot weaken network denial"
-        )
-    if (
-        organization.get("execute_target_code") is False
-        and repository.get("execute_target_code", False) is not False
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot enable target code execution"
-        )
-    if (
-        organization.get("require_attestation") is True
-        and repository.get("require_attestation", True) is not True
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot disable isolation attestation"
-        )
-    if (
-        organization.get("require_evidence") is True
-        and repository.get("require_evidence", True) is not True
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot disable isolation evidence"
-        )
-
-
-def _reject_weaker_policy_settings(
-    organization: Mapping[str, Any], repository: Mapping[str, Any]
-) -> None:
-    org_required = set(organization.get("required_scanners", []))
-    if "required_scanners" in repository:
-        repo_required = set(repository["required_scanners"])
-        if not org_required.issubset(repo_required):
-            raise ConfigurationError(
-                "repository required_scanners must include every organization-required scanner"
-            )
-    org_block = set(organization.get("block_severities", []))
-    if "block_severities" in repository:
-        repo_block = set(repository["block_severities"])
-        if not org_block.issubset(repo_block):
-            raise ConfigurationError(
-                "repository block_severities cannot weaken organization policy"
-            )
-    if (
-        organization.get("incomplete_is_blocking") is True
-        and repository.get("incomplete_is_blocking", True) is not True
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot make incomplete scans non-blocking"
-        )
-    approved_acceptance = str(organization.get("risk_acceptance_sha256") or "").lower()
-    if (
-        approved_acceptance
-        and "risk_acceptance_sha256" in repository
-        and str(repository.get("risk_acceptance_sha256") or "").lower()
-        != approved_acceptance
-    ):
-        raise ConfigurationError(
-            "repository configuration cannot change the approved risk_acceptance_sha256"
-        )
 
 
 def _reject_weaker_tool_settings(organization: object, repository: object) -> None:
@@ -1631,8 +1587,13 @@ def _reject_weaker_reachability(
 ) -> None:
     if "minimum_island_loc" in repository:
         try:
-            organization_threshold = int(organization.get("minimum_island_loc", 100))
-            repository_threshold = int(repository["minimum_island_loc"])
+            organization_threshold = integer_setting(
+                organization.get("minimum_island_loc", 100),
+                "reachability.minimum_island_loc",
+            )
+            repository_threshold = integer_setting(
+                repository["minimum_island_loc"], "reachability.minimum_island_loc"
+            )
         except (TypeError, ValueError) as exc:
             raise ConfigurationError(
                 "reachability minimum_island_loc must be an integer"
@@ -1713,7 +1674,7 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     trust = _trust_config(mapping["trust"], profile)
     paths = _paths_config(mapping["paths"])
     tool_configs = _tool_configs(mapping["tools"])
-    _validate_required_tools(
+    _validate_required_tools(  # disabled profile tools stay required: INCOMPLETE
         policy.required_scanners or PROFILE_TOOLS[profile], tool_configs
     )
 
@@ -1771,11 +1732,16 @@ def _isolation_config(data: Mapping[str, Any], profile: str) -> IsolationConfig:
     config = IsolationConfig(
         network=str(data["network"]),
         enforcement_mode=str(data.get("enforcement_mode") or "external-attested"),
-        require_attestation=bool(data["require_attestation"]),
-        require_evidence=(
-            bool(data["require_evidence"]) or profile in {"production", "release"}
+        require_attestation=_flag(
+            data["require_attestation"], "isolation.require_attestation"
         ),
-        execute_target_code=bool(data["execute_target_code"]),
+        require_evidence=(
+            _flag(data["require_evidence"], "isolation.require_evidence")
+            or profile in {"production", "release"}
+        ),
+        execute_target_code=_flag(
+            data["execute_target_code"], "isolation.execute_target_code"
+        ),
         evidence_path=Path(str(evidence)).expanduser() if evidence else None,
         evidence_sha256=evidence_sha256,
         evidence_public_key_path=(
@@ -1827,17 +1793,9 @@ def _isolation_config(data: Mapping[str, Any], profile: str) -> IsolationConfig:
 
 def _execution_config(data: Mapping[str, Any]) -> ExecutionConfig:
     try:
-        config = ExecutionConfig(
-            max_workers=int(data["max_workers"]),
-            max_output_bytes=int(data["max_output_bytes"]),
-        )
+        return ExecutionConfig(**execution_limits(data))
     except (TypeError, ValueError) as exc:
-        raise ConfigurationError("execution limits must be integers") from exc
-    if not 1 <= config.max_workers <= 16:
-        raise ConfigurationError("execution.max_workers must be between 1 and 16")
-    if config.max_output_bytes < 1024:
-        raise ConfigurationError("execution.max_output_bytes must be at least 1024")
-    return config
+        raise ConfigurationError(str(exc)) from exc
 
 
 def _policy_config(data: Mapping[str, Any], profile: str) -> PolicyConfig:
@@ -1852,10 +1810,15 @@ def _policy_config(data: Mapping[str, Any], profile: str) -> PolicyConfig:
     acceptance = data.get("risk_acceptance_path")
     acceptance_sha256 = str(data.get("risk_acceptance_sha256") or "").lower()
     _validate_digest("policy", "risk_acceptance_sha256", acceptance_sha256)
+    if not _flag(data["incomplete_is_blocking"], "policy.incomplete_is_blocking"):
+        raise ConfigurationError(
+            "policy.incomplete_is_blocking = false is not supported; "
+            "incomplete scans always block"
+        )
     return PolicyConfig(
         required_scanners=tuple(str(value) for value in data["required_scanners"]),
         block_severities=block_severities,
-        incomplete_is_blocking=bool(data["incomplete_is_blocking"]),
+        incomplete_is_blocking=True,
         risk_acceptance_path=(
             Path(str(acceptance)).expanduser() if acceptance else None
         ),
@@ -1873,7 +1836,9 @@ def _reports_config(data: Mapping[str, Any]) -> ReportsConfig:
         )
     classification = str(data.get("classification") or "").casefold()
     try:
-        retention_days = int(str(data.get("retention_days") or ""))
+        retention_days = integer_setting(
+            data.get("retention_days"), "reports.retention_days"
+        )
     except (TypeError, ValueError) as exc:
         raise ConfigurationError("reports.retention_days must be an integer") from exc
     if classification not in {"confidential", "restricted"}:
@@ -1883,7 +1848,9 @@ def _reports_config(data: Mapping[str, Any]) -> ReportsConfig:
     if not 1 <= retention_days <= 3650:
         raise ConfigurationError("reports.retention_days must be between 1 and 3650")
     return ReportsConfig(
-        include_sanitized_evidence=bool(data["include_sanitized_evidence"]),
+        include_sanitized_evidence=_flag(
+            data["include_sanitized_evidence"], "reports.include_sanitized_evidence"
+        ),
         baseline_path=Path(str(baseline)).expanduser() if baseline else None,
         baseline_sha256=baseline_sha256,
         classification=classification,
@@ -1940,6 +1907,7 @@ def _intelligence_config(data: Mapping[str, Any], profile: str) -> IntelligenceC
         raise ConfigurationError(
             "intelligence approval requires a digest-pinned public key and signature"
         )
+    require_approval = _flag(data["require_approval"], "intelligence.require_approval")
     try:
         config = IntelligenceConfig(
             kev_path=paths["kev_path"],
@@ -1953,9 +1921,7 @@ def _intelligence_config(data: Mapping[str, Any], profile: str) -> IntelligenceC
             approval_public_key_path=paths["approval_public_key_path"],
             approval_public_key_sha256=digests["approval_public_key_sha256"],
             approval_signature_path=paths["approval_signature_path"],
-            require_approval=(
-                bool(data["require_approval"]) or profile in {"production", "release"}
-            ),
+            require_approval=require_approval or profile in {"production", "release"},
             require_governance_v2=profile in {"production", "release"},
             replay_ledger_path=paths["replay_ledger_path"],
             maximum_age_days=float(data["maximum_age_days"]),
@@ -2060,15 +2026,28 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         if not isinstance(data.get(setting, assurance_tool), bool):
             raise ConfigurationError(f"{name} {setting} must be true or false")
     try:
-        timeout = int(data["timeout_seconds"])
-        coverage_minimum = float(data.get("minimum_coverage_percent", 80.0))
-        database_maximum_age = float(data.get("maximum_database_age_days", 10.0))
-        evidence_maximum_age = float(data.get("maximum_evidence_age_days", 7.0))
-        minimum_island_loc = int(data.get("minimum_island_loc", 100))
+        timeout = integer_setting(
+            data["timeout_seconds"], f"tools.{name}.timeout_seconds"
+        )
+        coverage_minimum = real_setting(
+            data.get("minimum_coverage_percent", 80.0),
+            f"tools.{name}.minimum_coverage_percent",
+        )
+        database_maximum_age = real_setting(
+            data.get("maximum_database_age_days", 10.0),
+            f"tools.{name}.maximum_database_age_days",
+        )
+        evidence_maximum_age = real_setting(
+            data.get("maximum_evidence_age_days", 7.0),
+            f"tools.{name}.maximum_evidence_age_days",
+        )
+        minimum_island_loc = integer_setting(
+            data.get("minimum_island_loc", 100), f"tools.{name}.minimum_island_loc"
+        )
     except (TypeError, ValueError) as exc:
-        raise ConfigurationError(f"{name} numeric settings are invalid") from exc
+        raise ConfigurationError(str(exc)) from exc
     config = ToolConfig(
-        enabled=bool(data["enabled"]),
+        enabled=_flag(data["enabled"], f"tools.{name}.enabled"),
         executable=str(data["executable"]),
         timeout_seconds=timeout,
         rules_path=Path(rules).expanduser() if rules else None,
@@ -2101,14 +2080,19 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         minimum_island_loc=minimum_island_loc,
         entry_points=tuple(str(value) for value in entry_points),
         source_roots=tuple(str(value) for value in source_roots),
-        discover_framework_roots=bool(data.get("discover_framework_roots", True)),
+        discover_framework_roots=_flag(
+            data.get("discover_framework_roots", True),
+            f"tools.{name}.discover_framework_roots",
+        ),
         coverage_path=Path(coverage_path).expanduser() if coverage_path else None,
         maximum_evidence_age_days=evidence_maximum_age,
-        require_evidence_contract_v2=bool(
-            data.get("require_evidence_contract_v2", assurance_tool)
+        require_evidence_contract_v2=_flag(
+            data.get("require_evidence_contract_v2", assurance_tool),
+            f"tools.{name}.require_evidence_contract_v2",
         ),
-        require_signed_evidence=bool(
-            data.get("require_signed_evidence", assurance_tool)
+        require_signed_evidence=_flag(
+            data.get("require_signed_evidence", assurance_tool),
+            f"tools.{name}.require_signed_evidence",
         ),
         expected_run_id=str(data.get("expected_run_id") or ""),
         expected_environment_sha256=str(
@@ -2161,8 +2145,9 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         assurance_profile_sha256=str(
             data.get("assurance_profile_sha256") or ""
         ).lower(),
-        require_assurance_profile=bool(
-            data.get("require_assurance_profile", assurance_tool)
+        require_assurance_profile=_flag(
+            data.get("require_assurance_profile", assurance_tool),
+            f"tools.{name}.require_assurance_profile",
         ),
     )
     _validate_tool_config(name, config)
@@ -2339,6 +2324,17 @@ def _validate_digest(name: str, setting: str, value: str) -> None:
         )
 
 
+def _flag(value: object, setting: str) -> bool:
+    if not isinstance(value, bool):  # TOML strings such as "false" are rejected
+        raise ConfigurationError(f"{setting} must be a boolean")
+    return value
+
+
+def _required_tools(profile: str, required: tuple[str, ...]) -> tuple[str, ...]:
+    """Explicit requirements extend the profile; they never narrow it."""
+    return tuple(dict.fromkeys((*PROFILE_TOOLS[profile], *required)))
+
+
 def _validate_required_tools(
     required: tuple[str, ...], tool_configs: Mapping[str, ToolConfig]
 ) -> None:
@@ -2390,8 +2386,16 @@ def _load_config_active(
     merged = _deep_merge(protected_base, repository)
     if profile_override is not None:
         merged["profile"] = profile_override
-        if not merged["policy"]["required_scanners"]:
-            merged["policy"]["required_scanners"] = []
+    for error in (
+        profile_floor_error(
+            organization.get("profile"), merged["profile"], PROFILE_TOOLS
+        ),
+        risk_acceptance_authority_error(
+            merged["profile"], merged["policy"], organization.get("policy")
+        ),
+    ):
+        if error:
+            raise ConfigurationError(error)
     if (
         organization_policy is not None
         and str(merged.get("profile")) in {"production", "release"}

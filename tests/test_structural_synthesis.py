@@ -13,7 +13,10 @@ from py_security_suite.reports import (
     render_sarif,
     render_sonarqube_external_issues,
 )
-from py_security_suite.structural_synthesis import build_structural_synthesis
+from py_security_suite.structural_synthesis import (
+    _nearest_graph_node,
+    build_structural_synthesis,
+)
 
 
 def _finding(
@@ -148,6 +151,12 @@ def _coverage(*, covered: bool = False) -> dict[str, object]:
 
 
 class StructuralSynthesisTests(unittest.TestCase):
+    def test_nearest_graph_node_without_line_uses_first_candidate(self) -> None:
+        expected = {"label": "entry", "line": 7}
+        graph = {"nodes_by_path": {"app.py": [expected]}}
+
+        self.assertEqual(_nearest_graph_node(graph, "app.py", None), expected)
+
     def test_cross_checks_dead_code_as_likely_removable(self) -> None:
         dead = _finding("DEAD", tool="vulture", path="src/dead.py", line=12)
         result = build_structural_synthesis(

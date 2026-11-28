@@ -4,7 +4,7 @@ param(
     [string]$Python = "",
     [switch]$Force,
     [string]$BanditVersion = "1.9.4",
-    [string]$SemgrepVersion = "1.170.0",
+    [string]$SemgrepVersion = "1.187.0",
     [string]$DetectSecretsVersion = "1.5.0",
     [string]$DefusedXmlVersion = "0.7.1",
     [string]$RuffVersion = "0.15.22",
@@ -86,6 +86,12 @@ function Receive-PinnedFile {
 }
 
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$versionLine = Select-String -LiteralPath (Join-Path $workspace "src\py_security_suite\version.py") `
+    -Pattern '^__version__ = "([0-9A-Za-z.+!-]+)"$'
+if ($versionLine.Matches.Count -ne 1) {
+    throw "Package version authority is invalid"
+}
+$suiteVersion = $versionLine.Matches[0].Groups[1].Value
 if (-not $Python) {
     $candidates = @()
     if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -473,7 +479,7 @@ $actualDatabaseHash = (
 if ($actualDatabaseHash -ne $OsvDatabaseSha256.ToLowerInvariant()) {
     throw "PyPI OSV database checksum mismatch: $actualDatabaseHash"
 }
-$databaseValidator = Join-Path $PSScriptRoot "validate-osv-snapshot.py"
+$databaseValidator = Join-Path $PSScriptRoot "validate_osv_snapshot.py"
 $databaseSummaryJson = & $Python $databaseValidator $databaseArchive `
     --expected-sha256 $actualDatabaseHash
 if ($LASTEXITCODE -ne 0 -or -not $databaseSummaryJson) {
@@ -500,7 +506,7 @@ $pythonEnvironments = @(
         requirements = @(
             $requirements +
             "reuse[charset-normalizer]==$ReuseVersion" +
-            "py-security-suite==0.1.0"
+            "py-security-suite==$suiteVersion"
         )
     },
     [ordered]@{
@@ -569,7 +575,7 @@ $manifest = [ordered]@{
         syft = $SyftVersion
         grype = $GrypeVersion
         trufflehog = $TruffleHogVersion
-        "py-security-suite" = "0.1.0"
+        "py-security-suite" = $suiteVersion
     }
     sources = [ordered]@{
         python_packages = "https://pypi.org/simple/"

@@ -22,6 +22,24 @@ def maintained_files(target: Path, suffixes: frozenset[str]) -> list[Path]:
 
 
 @contextmanager
+def python_scan_tree(target: Path) -> Iterator[Path]:
+    """Stage the declared Python inventory without repository scanner ignores."""
+    root = target.resolve()
+    with tempfile.TemporaryDirectory(prefix="pysec-python-") as directory:
+        # macOS /var and Windows short-name TEMP paths may be aliases. File
+        # inventory returns canonical paths, so relative names need this root.
+        mirror = Path(directory).resolve()
+        for source in maintained_files(root, frozenset({".py"})):
+            destination = mirror / source.relative_to(root)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        # An explicit empty file replaces Semgrep's default exclusions (tests,
+        # for example). The suite's maintained-file policy owns the inventory.
+        (mirror / ".semgrepignore").write_text("", encoding="utf-8")
+        yield mirror
+
+
+@contextmanager
 def mirrored_source_tree(target: Path) -> Iterator[Path]:
     root = target.resolve()
     with tempfile.TemporaryDirectory(prefix="pysec-source-") as directory:

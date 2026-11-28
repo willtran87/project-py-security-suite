@@ -22,6 +22,8 @@ from .execution import (
 )
 from .models import Inventory
 from .path_safety import read_regular_file
+from .scan_control import analysis_checkpoint
+from .source_stream import stream_source
 from .strict_json import canonical_bytes, loads as strict_loads
 from .git_replay import externalize_and_reverify_bundle
 
@@ -79,6 +81,7 @@ def inventory_target_with_evidence(
     target: Path, *, excluded_paths: tuple[Path, ...] = ()
 ) -> tuple[Inventory, dict[str, Any]]:
     """Inventory a target and retain the exact file identities behind its digest."""
+    analysis_checkpoint()
     python_files = 0
     dependency_files: list[str] = []
     lock_files: list[str] = []
@@ -93,6 +96,7 @@ def inventory_target_with_evidence(
     source_sha256 = str(source_evidence["source_sha256"])
     hashed_bytes = int(source_evidence["total_bytes"])
     for path in maintained_files:
+        analysis_checkpoint()
         relative = path.relative_to(target).as_posix()
         if path.suffix == ".py":
             python_files += 1
@@ -151,14 +155,15 @@ def _vcs_revision(target: Path) -> tuple[str, bool]:
 
 
 def source_snapshot(
-    target: Path, *, excluded_paths: tuple[Path, ...] = ()
+    target: Path, *, excluded_paths: tuple[Path, ...] = (), cancellable: bool = True
 ) -> tuple[str, int, int]:
     files, _ = _maintained_files(
         target,
         excluded_paths,
         skip_directories=_INTEGRITY_SKIP_DIRECTORIES,
+        cancellable=cancellable,
     )
-    digest, total_bytes = _source_digest(target, files)
+    digest, total_bytes = _source_digest(target, files, cancellable=cancellable)
     return digest, len(files), total_bytes
 
 
@@ -171,6 +176,7 @@ def sealed_source_snapshot(
     require_signed_git_provenance: bool = False,
 ) -> Iterator[Path]:
     """Copy the exact inventoried source set into a private read-only scan root."""
+    analysis_checkpoint()
     expected_digest = str(source_inventory.get("source_sha256") or "")
     records = source_inventory.get("files")
     if not isinstance(records, list) or not expected_digest:
@@ -181,6 +187,7 @@ def sealed_source_snapshot(
     try:
         _reject_lfs_pointer_records(target, records)
         for record in records:
+            analysis_checkpoint()
             if not isinstance(record, dict):
                 raise ValueError("source inventory contains an invalid file record")
             relative = Path(str(record.get("path") or ""))
@@ -195,18 +202,16 @@ def sealed_source_snapshot(
             digest = str(record.get("sha256") or "")
             if isinstance(size, bool) or not isinstance(size, int) or size < 0:
                 raise ValueError("source inventory contains an invalid snapshot size")
-            _, payload = read_regular_file(
-                target / relative,
-                "source snapshot member",
-                maximum_bytes=max(1, size),
-                boundary=target,
-            )
-            if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest:
-                raise ValueError("source changed while the sealed snapshot was created")
             destination = snapshot / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             with destination.open("xb") as handle:
-                handle.write(payload)
+                observed_size, observed_digest = stream_source(
+                    target / relative, target, destination=handle, maximum_bytes=size
+                )
+                if observed_size != size or observed_digest != digest:
+                    raise ValueError(
+                        "source changed while the sealed snapshot was created"
+                    )
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(destination, 0o400)
@@ -230,6 +235,7 @@ def sealed_source_snapshot(
         for directory in sorted(
             (path for path in snapshot.rglob("*") if path.is_dir()), reverse=True
         ):
+            analysis_checkpoint()
             os.chmod(directory, 0o500)
         os.chmod(snapshot, 0o500)
         yield snapshot
@@ -1059,6 +1065,7 @@ def _reject_lfs_pointer_records(target: Path, records: list[object]) -> None:
     """Reject Git LFS pointer placeholders in place of analyzable object bytes."""
     marker = b"version https://git-lfs.github.com/spec/v1\n"
     for record in records:
+        analysis_checkpoint()
         if not isinstance(record, dict):
             continue
         size = record.get("size_bytes")
@@ -1083,30 +1090,32 @@ def _copy_regular_tree(source: Path, destination: Path) -> None:
     total_bytes = 0
     destination.mkdir(mode=0o700)
     for root, directories, names in os.walk(source, followlinks=False):
+        analysis_checkpoint()
         root_path = Path(root)
         relative_root = root_path.relative_to(source)
         for directory in sorted(directories):
+            analysis_checkpoint()
             candidate = root_path / directory
             if candidate.is_symlink():
                 raise ValueError("sealed Git history contains a symbolic link")
             (destination / relative_root / directory).mkdir(mode=0o700)
         for name in sorted(names):
+            analysis_checkpoint()
             candidate = root_path / name
             if candidate.is_symlink():
                 raise ValueError("sealed Git history contains a symbolic link")
-            _, payload = read_regular_file(
-                candidate,
-                "sealed Git history member",
-                maximum_bytes=1024 * 1024**2,
-                boundary=source,
-            )
             files += 1
-            total_bytes += len(payload)
             if files > 1_000_000 or total_bytes > 8 * 1024**3:
                 raise ValueError("sealed Git history exceeds its copy limits")
             output = destination / relative_root / name
             with output.open("xb") as handle:
-                handle.write(payload)
+                copied, _ = stream_source(
+                    candidate,
+                    source,
+                    destination=handle,
+                    maximum_bytes=min(1024**3, 8 * 1024**3 - total_bytes),
+                )
+                total_bytes += copied
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(output, 0o400)
@@ -1117,15 +1126,20 @@ def _maintained_files(
     excluded_paths: tuple[Path, ...],
     *,
     skip_directories: frozenset[str] = _SKIP_DIRECTORIES,
+    cancellable: bool = True,
 ) -> tuple[list[Path], int]:
     resolved_target = target.resolve()
     excluded = tuple(path.resolve() for path in excluded_paths)
     files: list[Path] = []
     skipped_symlinks = 0
     for root, directories, filenames in os.walk(resolved_target, followlinks=False):
+        if cancellable:
+            analysis_checkpoint()
         root_path = Path(root)
         kept_directories: list[str] = []
         for directory in sorted(directories):
+            if cancellable:
+                analysis_checkpoint()
             path = root_path / directory
             if path.is_symlink():
                 skipped_symlinks += 1
@@ -1133,6 +1147,8 @@ def _maintained_files(
                 kept_directories.append(directory)
         directories[:] = kept_directories
         for filename in sorted(filenames):
+            if cancellable:
+                analysis_checkpoint()
             path = root_path / filename
             if filename == ".git":
                 # A submodule's .git pointer may reference the original host
@@ -1265,34 +1281,33 @@ def _retained_git_provenance(snapshot: Path) -> list[dict[str, Any]]:
     return retained
 
 
-def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:
-    evidence = _source_inventory(target, paths)
+def _source_digest(
+    target: Path, paths: list[Path], *, cancellable: bool = True
+) -> tuple[str, int]:
+    evidence = _source_inventory(target, paths, cancellable=cancellable)
     return str(evidence["source_sha256"]), int(evidence["total_bytes"])
 
 
-def _source_inventory(target: Path, paths: list[Path]) -> dict[str, Any]:
+def _source_inventory(
+    target: Path, paths: list[Path], *, cancellable: bool = True
+) -> dict[str, Any]:
     aggregate = hashlib.sha256()
     total_bytes = 0
     resolved_target = target.resolve()
     records: list[dict[str, Any]] = []
     for path in paths:
-        content = hashlib.sha256()
-        size = 0
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                content.update(chunk)
-                size += len(chunk)
+        size, digest = stream_source(path, resolved_target, cancellable=cancellable)
         relative = path.relative_to(resolved_target).as_posix().encode("utf-8")
         aggregate.update(len(relative).to_bytes(8, "big"))
         aggregate.update(relative)
         aggregate.update(size.to_bytes(8, "big"))
-        aggregate.update(content.digest())
+        aggregate.update(bytes.fromhex(digest))
         total_bytes += size
         records.append(
             {
                 "path": relative.decode("utf-8"),
                 "size_bytes": size,
-                "sha256": content.hexdigest(),
+                "sha256": digest,
             }
         )
     return {

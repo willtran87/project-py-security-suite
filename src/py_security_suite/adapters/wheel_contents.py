@@ -5,7 +5,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from ..execution import sha256_file
+from ..execution import RawExecution, sha256_file
 from ..models import (
     Citation,
     Confidence,
@@ -18,6 +18,7 @@ from ..models import (
 )
 from .artifacts import artifact_identity_evidence, wheel_files
 from .base import ScannerAdapter
+from .common import failure_exit_payload, require_results_for_failure_exit
 
 _ISSUE = re.compile(r"^(?P<path>.+?):\s+(?P<rule>W\d{3}):\s+(?P<message>.+)$")
 
@@ -25,6 +26,12 @@ _ISSUE = re.compile(r"^(?P<path>.+?):\s+(?P<rule>W\d{3}):\s+(?P<message>.+)$")
 class CheckWheelContentsAdapter(ScannerAdapter):
     name = "check-wheel-contents"
     accepted_exit_codes = frozenset({0, 1})
+
+    _exit_code: int | None = None
+
+    def result_payload(self, execution: RawExecution) -> str:
+        self._exit_code = execution.exit_code
+        return failure_exit_payload(self.name, execution, execution.stdout)
 
     def not_applicable_reason(self, target: Path) -> str | None:
         if not wheel_files(target, self.config):
@@ -101,6 +108,7 @@ class CheckWheelContentsAdapter(ScannerAdapter):
                 )
             )
         findings.extend(self._source_parity_findings(target))
+        require_results_for_failure_exit(self.name, self._exit_code, len(findings))
         return findings
 
     def _source_parity_findings(self, target: Path) -> list[Finding]:

@@ -9,10 +9,41 @@ updates:
       default-days: 7
     schedule:
       interval: weekly
-  - package-ecosystem: pip
+  # uv-managed projects: Dependabot updates pyproject.toml and uv.lock together
+  # so locked versions (not only manifests) receive version updates.
+  - package-ecosystem: uv
     directory: /
     groups:
       root-python:
+        patterns: ["*"]
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  - package-ecosystem: uv
+    directory: /companion
+    groups:
+      companion-python:
+        patterns: ["*"]
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  # After a scanner update, regenerate containers/scanner/requirements.lock and
+  # build-requirements.lock with `uv export` (CI rejects a stale export).
+  - package-ecosystem: uv
+    directory: /containers/scanner
+    groups:
+      scanner-python:
+        patterns: ["*"]
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /containers/scanner
+    groups:
+      scanner-image:
         patterns: ["*"]
     cooldown:
       default-days: 7
@@ -22,15 +53,6 @@ updates:
     directory: /docs
     groups:
       documentation-python:
-        patterns: ["*"]
-    cooldown:
-      default-days: 7
-    schedule:
-      interval: weekly
-  - package-ecosystem: pip
-    directory: /companion
-    groups:
-      companion-python:
         patterns: ["*"]
     cooldown:
       default-days: 7

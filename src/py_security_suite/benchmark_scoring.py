@@ -522,7 +522,7 @@ def _wilson_upper(successes: int, trials: int) -> float:
     denominator = 1 + z * z / trials
     center = rate + z * z / (2 * trials)
     margin = z * ((rate * (1 - rate) / trials + z * z / (4 * trials * trials)) ** 0.5)
-    return round((center + margin) / denominator, 12)
+    return float(round((center + margin) / denominator, 12))
 
 
 def _wilson_lower(successes: int, trials: int) -> float:
@@ -533,7 +533,7 @@ def _wilson_lower(successes: int, trials: int) -> float:
     denominator = 1 + z * z / trials
     center = rate + z * z / (2 * trials)
     margin = z * ((rate * (1 - rate) / trials + z * z / (4 * trials * trials)) ** 0.5)
-    return round(max(0.0, (center - margin) / denominator), 12)
+    return float(round(max(0.0, (center - margin) / denominator), 12))
 
 
 def _ratio(numerator: float, denominator: float) -> float:

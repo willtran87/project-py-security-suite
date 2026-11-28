@@ -1,9 +1,22 @@
 *
 !README.md
+!LICENSE
+!MANIFEST.in
 !pyproject.toml
 !src/
 !src/**
 !containers/
 !containers/scanner/
 !containers/scanner/Dockerfile
+!containers/scanner/build-requirements.lock
 !containers/scanner/pysec.toml
+!containers/scanner/requirements.lock
+# Re-exclude local build and interpreter state that the negations above would
+# otherwise re-admit into the image build context.
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.venv
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache

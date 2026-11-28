@@ -1205,7 +1205,6 @@ wheels = [
 
 [[package]]
 name = "py-security-suite"
-version = "0.1.0"
 source = { editable = "../" }
 dependencies = [
     { name = "cryptography" },
@@ -1236,41 +1235,43 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = ">=50,<51" },
+    { name = "cryptography", specifier = ">=50,<60" },
     { name = "defusedxml", specifier = ">=0.7.1,<0.8" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "macholib", specifier = ">=1.16.4,<2" },
-    { name = "pefile", specifier = ">=2024.8.26,<2025" },
+    { name = "pefile", specifier = ">=2024.8.26,<2030" },
     { name = "psutil", specifier = ">=7.2,<8" },
-    { name = "pyelftools", specifier = ">=0.33,<0.34" },
+    { name = "pyelftools", specifier = ">=0.33,<1" },
     { name = "pypdf", specifier = ">=5,<7" },
     { name = "rfc3161ng", specifier = ">=2.1.3,<3" },
     { name = "rfc8785", specifier = ">=0.1.4,<1" },
     { name = "tree-sitter", specifier = ">=0.26,<0.27" },
-    { name = "tree-sitter-c", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-c-sharp", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-cpp", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-go", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-java", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-javascript", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-kotlin", specifier = ">=1.1,<1.2" },
-    { name = "tree-sitter-php", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-ruby", specifier = ">=0.23,<0.24" },
-    { name = "tree-sitter-rust", specifier = ">=0.24,<0.25" },
-    { name = "tree-sitter-swift", specifier = ">=0.7,<0.8" },
-    { name = "tree-sitter-typescript", specifier = ">=0.23,<0.24" },
-    { name = "wasmtime", specifier = ">=47,<49" },
+    { name = "tree-sitter-c", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-c-sharp", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-cpp", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-go", specifier = ">=0.25,<1" },
+    { name = "tree-sitter-java", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-javascript", specifier = ">=0.25,<1" },
+    { name = "tree-sitter-kotlin", specifier = ">=1.1,<2" },
+    { name = "tree-sitter-php", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-ruby", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-rust", specifier = ">=0.24,<1" },
+    { name = "tree-sitter-swift", specifier = ">=0.7,<1" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23,<1" },
+    { name = "wasmtime", specifier = ">=47,<60" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "atheris", marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=3.1,<4" },
+    { name = "check-manifest", specifier = ">=0.51,<1" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10,<8" },
     { name = "diff-cover", specifier = ">=10.2,<11" },
     { name = "hypothesis", specifier = ">=6.140,<7" },
     { name = "hypothesis-jsonschema", specifier = ">=0.23,<0.24" },
     { name = "mutmut", specifier = ">=3.7,<4" },
     { name = "mypy", specifier = ">=1.17,<3" },
+    { name = "packaging", specifier = ">=24,<27" },
     { name = "pip-audit", specifier = ">=2.9,<3" },
     { name = "pyfakefs", specifier = ">=5.9,<7" },
     { name = "pyright", specifier = "==1.1.411" },

@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import rfc3161ng  # type: ignore[import-untyped]
 from cryptography import x509
@@ -39,21 +40,31 @@ def verify_rfc3161(
         return result
     if not 2 <= len(value) <= 5:
         raise ValueError("trusted-time quorum requires two to five authorities")
-    receipts = [
-        _verify_single_rfc3161(
-            context_path, item, challenge_sha256, require_advanced=require_advanced
+    verified = [
+        _verify_rfc3161_receipt(
+            context_path,
+            item,
+            challenge_sha256,
+            require_advanced=require_advanced,
+            require_authority_binding=True,
         )
         for item in value
     ]
-    authorities = {
-        str(item.get("authority")) for item in value if isinstance(item, dict)
-    }
+    receipts = [result for result, _ in verified]
+    identities = [identity for _, identity in verified]
+    # Independence is judged on cryptographic identity, never on the bytes of
+    # an evidence file or the spelling of an authority name: the same TSA
+    # presented as PEM and DER, or as "TSA" and " tsa ", still counts once.
+    authorities = {identity["authority"] for identity in identities}
+    for field in ("authority", "anchor", "signer_spki", "signer_certificate"):
+        if len({identity[field] for identity in identities}) != len(value):
+            raise ValueError("trusted-time quorum authorities must be independent")
     signers = {item["trusted_time_signer_sha256"] for item in receipts}
     observed = [
         datetime.fromisoformat(item["trusted_time_observed_at"].replace("Z", "+00:00"))
         for item in receipts
     ]
-    if len(authorities) != len(value) or len(signers) != len(value):
+    if len(signers) != len(value):
         raise ValueError("trusted-time quorum authorities must be independent")
     if max(observed) - min(observed) > timedelta(seconds=5):
         raise ValueError("trusted-time quorum timestamps disagree")
@@ -88,6 +99,20 @@ def _verify_single_rfc3161(
     *,
     require_advanced: bool = False,
 ) -> dict[str, str]:
+    return _verify_rfc3161_receipt(
+        context_path, value, challenge_sha256, require_advanced=require_advanced
+    )[0]
+
+
+def _verify_rfc3161_receipt(
+    context_path: Path,
+    value: object,
+    challenge_sha256: str,
+    *,
+    require_advanced: bool = False,
+    require_authority_binding: bool = False,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Verify one receipt and return its result plus its signer identity."""
     v1_required = {
         "format",
         "authority",
@@ -158,16 +183,7 @@ def _verify_single_rfc3161(
     if abs((issued_at - observed_at).total_seconds()) > 1:
         raise ValueError("RFC 3161 timestamp does not match observed_at")
     certificate = _certificate(certificate_bytes)
-    try:
-        eku = certificate.extensions.get_extension_for_class(
-            x509.ExtendedKeyUsage
-        ).value
-    except x509.ExtensionNotFound as exc:
-        raise ValueError("timestamp signer certificate lacks an EKU") from exc
-    if ExtendedKeyUsageOID.TIME_STAMPING not in eku:
-        raise ValueError(
-            "timestamp signer certificate is not authorized for timestamping"
-        )
+    _verify_timestamping_eku(certificate)
     certificate_valid_at_issuance = (
         certificate.not_valid_before_utc <= issued_at <= certificate.not_valid_after_utc
     )
@@ -223,7 +239,7 @@ def _verify_single_rfc3161(
             raise ValueError(
                 "timestamp signer is not the first certificate in its chain"
             )
-        _verify_chain(chain, roots, issued_at)
+        anchor = _verify_chain(chain, roots, issued_at)
         _verify_revocation(chain, roots, revocation_bytes, issued_at)
         policy_oid = _text(value.get("tsa_policy_oid"), "TSA policy OID", 200)
         if not all(part.isdigit() for part in policy_oid.split(".")):
@@ -236,6 +252,12 @@ def _verify_single_rfc3161(
         _verify_ess_cert_id_v2(token, certificate)
     else:
         _verify_legacy_policy(authority, signer_sha256)
+        # A legacy receipt has no path: its pinned signer is its own anchor.
+        anchor = certificate
+    anchor_sha256 = _certificate_sha256(anchor)
+    _verify_authority_binding(
+        authority, anchor_sha256, required=require_authority_binding
+    )
     normalized = {
         "format": "rfc3161",
         "authority": authority,
@@ -247,12 +269,42 @@ def _verify_single_rfc3161(
         "revocation_sha256": revocation_sha256,
         "tsa_policy_oid": policy_oid,
     }
+    identity = {
+        "authority": _normalize_authority(authority),
+        "anchor": anchor_sha256,
+        "signer_certificate": _certificate_sha256(certificate),
+        "signer_spki": hashlib.sha256(
+            certificate.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        ).hexdigest(),
+    }
     return {
         "trusted_time_sha256": hashlib.sha256(canonical_bytes(normalized)).hexdigest(),
         "trusted_time_observed_at": observed_at.isoformat(),
         "trusted_time_receipt_sha256": receipt_sha256,
         "trusted_time_signer_sha256": signer_sha256,
-    }
+    }, identity
+
+
+def _verify_timestamping_eku(certificate: x509.Certificate) -> None:
+    """Enforce RFC 3161 section 2.3: one critical, timestamping-only EKU."""
+    try:
+        extension = certificate.extensions.get_extension_for_class(
+            x509.ExtendedKeyUsage
+        )
+    except x509.ExtensionNotFound as exc:
+        raise ValueError("timestamp signer certificate lacks an EKU") from exc
+    except x509.DuplicateExtension as exc:
+        raise ValueError("timestamp signer certificate repeats an extension") from exc
+    usages = list(extension.value)
+    if usages != [ExtendedKeyUsageOID.TIME_STAMPING]:
+        raise ValueError(
+            "timestamp signer certificate EKU must contain only id-kp-timeStamping"
+        )
+    if not extension.critical:
+        raise ValueError("timestamp signer certificate EKU must be critical")
 
 
 def _verify_deployment_policy(
@@ -261,13 +313,70 @@ def _verify_deployment_policy(
     """Bind evidence-provided PKIX material to deployment-owned trust anchors."""
     pinned_roots = _deployment_values("PYSEC_TSA_ROOT_SHA256", digest=True)
     allowed_policies = _deployment_values("PYSEC_TSA_POLICY_OIDS")
-    allowed_authorities = _deployment_values("PYSEC_TSA_AUTHORITIES")
+    allowed_authorities = _authority_policy()
     if root_sha256 not in pinned_roots:
         raise ValueError("timestamp trust root is not deployment-pinned")
     if policy_oid not in allowed_policies:
         raise ValueError("timestamp policy OID is not deployment-approved")
-    if authority not in allowed_authorities:
+    if _normalize_authority(authority) not in allowed_authorities:
         raise ValueError("timestamp authority is not deployment-approved")
+
+
+def _normalize_authority(value: str) -> str:
+    """Fold presentation differences so one TSA has exactly one name."""
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _authority_policy() -> dict[str, frozenset[str]]:
+    """Parse ``PYSEC_TSA_AUTHORITIES`` as ``name`` or ``name=<anchor sha256>``.
+
+    The optional digest binds the authority name to the SHA-256 of the DER
+    trust-anchor certificate its receipts must chain to (for legacy receipts,
+    the pinned signer certificate itself). A name may be bound to several
+    anchors to allow key rollover; trusted-time quorum members must be bound.
+    """
+    result: dict[str, set[str]] = {}
+    for entry in _deployment_values("PYSEC_TSA_AUTHORITIES"):
+        name, separator, raw_anchor = entry.partition("=")
+        key = _normalize_authority(name)
+        anchor = raw_anchor.strip().lower()
+        if not key or (separator and not _digest(anchor)):
+            raise ValueError(
+                "PYSEC_TSA_AUTHORITIES deployment policy is unavailable or invalid"
+            )
+        anchors = result.setdefault(key, set())
+        if separator:
+            anchors.add(anchor)
+    claimed: dict[str, str] = {}
+    for key, anchors in result.items():
+        for anchor in anchors:
+            if claimed.setdefault(anchor, key) != key:
+                raise ValueError(
+                    "PYSEC_TSA_AUTHORITIES binds one trust anchor to two authorities"
+                )
+    return {key: frozenset(anchors) for key, anchors in result.items()}
+
+
+def _verify_authority_binding(
+    authority: str, anchor_sha256: str, *, required: bool
+) -> None:
+    anchors = _authority_policy().get(_normalize_authority(authority))
+    if anchors is None:
+        raise ValueError("timestamp authority is not deployment-approved")
+    if not anchors:
+        if required:
+            raise ValueError(
+                "trusted-time quorum authority is not bound to a pinned trust anchor"
+            )
+        return
+    if anchor_sha256 not in anchors:
+        raise ValueError("timestamp authority is not bound to this trust anchor")
+
+
+def _certificate_sha256(certificate: x509.Certificate) -> str:
+    return hashlib.sha256(
+        certificate.public_bytes(serialization.Encoding.DER)
+    ).hexdigest()
 
 
 def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
@@ -450,10 +559,10 @@ def _state_sequence(name: str) -> int:
 
 def _verify_legacy_policy(authority: str, signer_sha256: str) -> None:
     pinned_signers = _deployment_values("PYSEC_TSA_SIGNER_SHA256", digest=True)
-    allowed_authorities = _deployment_values("PYSEC_TSA_AUTHORITIES")
+    allowed_authorities = _authority_policy()
     if signer_sha256 not in pinned_signers:
         raise ValueError("timestamp signer is not deployment-pinned")
-    if authority not in allowed_authorities:
+    if _normalize_authority(authority) not in allowed_authorities:
         raise ValueError("timestamp authority is not deployment-approved")
 
 
@@ -468,7 +577,9 @@ def _deployment_values(name: str, *, digest: bool = False) -> set[str]:
 
 def _certificates(value: bytes, label: str) -> list[x509.Certificate]:
     try:
-        certificates = x509.load_pem_x509_certificates(value)
+        certificates = cast(
+            list[x509.Certificate], x509.load_pem_x509_certificates(value)
+        )
     except ValueError:
         try:
             certificates = [_certificate(value)]
@@ -481,7 +592,8 @@ def _certificates(value: bytes, label: str) -> list[x509.Certificate]:
 
 def _verify_chain(
     chain: list[x509.Certificate], roots: list[x509.Certificate], issued_at: datetime
-) -> None:
+) -> x509.Certificate:
+    """Validate the path and return the deployment trust anchor it reaches."""
     current = chain[0]
     visited: set[bytes] = set()
     for depth in range(16):
@@ -502,7 +614,7 @@ def _verify_chain(
         if trusted is not None:
             _verify_certificate_signature(current, current)
             _verify_ca_constraints(current, max(0, depth - 1))
-            return
+            return trusted
         candidates = [*chain[1:], *roots]
         issuers = [item for item in candidates if item.subject == current.issuer]
         issuer = _select_issuer(current, issuers)
@@ -631,9 +743,10 @@ def _verify_revocation(
         if issuer is None:
             continue
         _verify_crl_signature(crl, issuer)
-        if crl.last_update_utc > issued_at or (
-            crl.next_update_utc is None or crl.next_update_utc < issued_at
-        ):
+        # A snapshot published after issuance is more current evidence, not
+        # less: it is the only way to learn of a later key compromise. Only a
+        # snapshot that had already expired before issuance is rejected.
+        if crl.next_update_utc is None or crl.next_update_utc < issued_at:
             raise ValueError("timestamp revocation snapshot is not valid at issuance")
         children = [
             certificate for certificate in chain if certificate.issuer == crl.issuer
@@ -641,7 +754,16 @@ def _verify_revocation(
         for child in children:
             covered_serials.add(child.serial_number)
             revoked = crl.get_revoked_certificate_by_serial_number(child.serial_number)
-            if revoked is not None and revoked.revocation_date_utc <= issued_at:
+            if revoked is None:
+                continue
+            reason = _revocation_reason(revoked)
+            if reason == x509.ReasonFlags.remove_from_crl:
+                continue
+            if reason in _COMPROMISE_REASONS:
+                # A compromised key can mint receipts with any genTime, so
+                # every receipt is untrusted regardless of revocation date.
+                raise ValueError("timestamp certificate key was compromised")
+            if revoked.revocation_date_utc <= issued_at:
                 raise ValueError("timestamp certificate was revoked at issuance")
     required_serials = {
         certificate.serial_number
@@ -652,6 +774,29 @@ def _verify_revocation(
         raise ValueError(
             "timestamp revocation snapshot does not cover the full certificate path"
         )
+
+
+_COMPROMISE_REASONS: frozenset[x509.ReasonFlags | None] = frozenset(
+    {
+        # An absent or unspecified reason cannot be shown to be benign.
+        None,
+        x509.ReasonFlags.unspecified,
+        x509.ReasonFlags.key_compromise,
+        x509.ReasonFlags.ca_compromise,
+        x509.ReasonFlags.aa_compromise,
+    }
+)
+
+
+def _revocation_reason(
+    revoked: x509.RevokedCertificate,
+) -> x509.ReasonFlags | None:
+    try:
+        return revoked.extensions.get_extension_for_class(x509.CRLReason).value.reason
+    except x509.ExtensionNotFound:
+        return None
+    except x509.DuplicateExtension as exc:
+        raise ValueError("timestamp revocation entry repeats an extension") from exc
 
 
 def _verify_crl_signature(

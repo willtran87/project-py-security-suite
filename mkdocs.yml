@@ -56,6 +56,10 @@ nav:
       - Structural synthesis: structural-synthesis.md
       - Data exposure: data-exposure.md
       - Detection effectiveness: effectiveness.md
+      - Validation pipeline: validation-pipeline.md
+      - Verified validation results: validation-results.md
+      - Production evaluation: production-evaluation.md
+      - Measured acceptance: professional-acceptance.md
       - Industry standards and benchmarks: industry-standards-benchmarks.md
   - Operations:
       - Operations guide: operations.md
@@ -63,6 +67,7 @@ nav:
       - Production security: production-security.md
       - Benchmark trust operations: benchmark-operations.md
       - Companion assurance: companion-assurance.md
+      - Release runbook: release-runbook.md
   - Governance:
       - API compatibility: api-compatibility.md
       - Release readiness: release-readiness.md

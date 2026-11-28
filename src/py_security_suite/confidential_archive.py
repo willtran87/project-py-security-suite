@@ -8,7 +8,7 @@ import struct
 import tempfile
 import zipfile
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -23,7 +23,12 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .execution import sha256_file
 from .passport import verify_report
-from .path_safety import read_regular_file
+from .path_safety import (
+    archive_member_key,
+    contained_archive_destination,
+    portable_archive_member,
+    read_regular_file,
+)
 from .strict_json import canonical_bytes, loads as strict_loads
 from .trusted_time import verify_rfc3161
 
@@ -375,19 +380,23 @@ def decrypt_report(
     )
     os.chmod(staging, 0o700)
     try:
-        archive = staging.parent / f".{staging.name}.zip"
+        # Decrypted plaintext (the archive and its extracted report) only ever
+        # exists inside the private 0700 staging directory.
+        report_root = staging / "report"
+        report_root.mkdir(mode=0o700)
+        archive = staging / "report.zip"
         try:
             header = _decrypt_archive(source_path, archive, private_key)
-            _extract_archive(archive, staging)
+            _extract_archive(archive, report_root)
         finally:
             if archive.exists():
                 archive.unlink()
-        verification = verify_report(staging)
+        verification = verify_report(report_root)
         if verification["checksums_sha256"] != header["report_checksums_sha256"]:
             raise ValueError("decrypted report identity does not match its envelope")
-        for path in [staging, *staging.rglob("*")]:
+        for path in [report_root, *report_root.rglob("*")]:
             os.chmod(path, 0o700 if path.is_dir() else 0o600)
-        staging.rename(destination)
+        report_root.rename(destination)
         return verification
     finally:
         if staging.exists():
@@ -454,7 +463,12 @@ def _decrypt_archive(
         ).decryptor()
         decryptor.authenticate_additional_data(header_bytes)
         remaining = ciphertext_bytes
-        with archive.open("wb") as target:
+        descriptor = os.open(
+            archive,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as target:
             while remaining:
                 chunk = source.read(min(1024 * 1024, remaining))
                 if not chunk:
@@ -473,25 +487,40 @@ def _extract_archive(archive: Path, staging: Path) -> None:
     with zipfile.ZipFile(archive) as bundle:
         if len(bundle.infolist()) > 10_000:
             raise ValueError("decrypted report contains too many files")
+        seen: set[str] = set()
         for item in bundle.infolist():
-            relative = PurePosixPath(item.filename)
-            if relative.is_absolute() or ".." in relative.parts or item.is_dir():
+            if item.is_dir():
                 raise ValueError("decrypted report archive path is invalid")
+            try:
+                relative = portable_archive_member(item.filename)
+            except ValueError as exc:
+                raise ValueError("decrypted report archive path is invalid") from exc
+            key = archive_member_key(relative)
+            if key in seen:
+                raise ValueError("decrypted report archive contains colliding paths")
+            seen.add(key)
             if (item.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError("decrypted report archive contains a link")
             total += item.file_size
             if total > _MAX_ARCHIVE:
                 raise ValueError("decrypted report exceeds 8 GiB")
-            target = staging.joinpath(*relative.parts)
+            target = contained_archive_destination(staging, relative)
             target.parent.mkdir(parents=True, exist_ok=True)
-            with bundle.open(item) as source, target.open("wb") as output:
+            descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+                0o600,
+            )
+            with bundle.open(item) as source, os.fdopen(descriptor, "wb") as output:
                 shutil.copyfileobj(source, output, 1024 * 1024)
 
 
 def _derive_key(shared_secret: bytes, salt: bytes) -> bytes:
-    return HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        info=b"py-security-suite/confidential-report/v1",
-    ).derive(shared_secret)
+    return bytes(
+        HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            info=b"py-security-suite/confidential-report/v1",
+        ).derive(shared_secret)
+    )

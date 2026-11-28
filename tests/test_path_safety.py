@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,10 +14,31 @@ from py_security_suite.path_safety import (
     resolve_regular_directory,
     resolve_regular_file,
     resolve_unlinked_path,
+    sha256_regular_file,
 )
 
 
 class PathSafetyTests(unittest.TestCase):
+    def test_sha256_regular_file_streams_bounded_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            payload = bytes(range(256)) * 9000  # spans several 1 MiB chunks
+            runtime = Path(directory) / "engine.bin"
+            runtime.write_bytes(payload)
+            resolved, digest, size = sha256_regular_file(
+                runtime, "runtime", maximum_bytes=len(payload)
+            )
+            self.assertEqual(resolved, runtime.resolve())
+            self.assertEqual(digest, hashlib.sha256(payload).hexdigest())
+            self.assertEqual(size, len(payload))
+            empty = Path(directory) / "empty"
+            empty.write_bytes(b"")
+            self.assertEqual(
+                sha256_regular_file(empty, "empty", maximum_bytes=1)[1:],
+                (hashlib.sha256(b"").hexdigest(), 0),
+            )
+            with self.assertRaisesRegex(ValueError, "exceeds"):
+                sha256_regular_file(runtime, "runtime", maximum_bytes=len(payload) - 1)
+
     def test_regular_paths_are_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

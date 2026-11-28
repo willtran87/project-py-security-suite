@@ -372,13 +372,12 @@ class EvidenceAndArtifactAdapterTests(unittest.TestCase):
         self.assertIn("dir:", adapter.build_command("grype", self.root)[1])
         with self.assertRaisesRegex(TypeError, "matches must be a list"):
             adapter.parse('{"matches":{"bad":1}}', self.root)
-        self.assertEqual(adapter.parse('{"matches":[1]}', self.root), [])
-        self.assertEqual(
+        with self.assertRaisesRegex(TypeError, "match must be an object"):
+            adapter.parse('{"matches":[1]}', self.root)
+        with self.assertRaisesRegex(TypeError, "must be objects"):
             adapter.parse(
                 '{"matches":[{"vulnerability":[1],"artifact":{}}]}', self.root
-            ),
-            [],
-        )
+            )
         payload = json.dumps(
             {
                 "matches": [

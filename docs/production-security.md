@@ -1,7 +1,5 @@
 # Production security gate
 
-Last reviewed: 2026-08-31
-
 ## Purpose
 
 The `production` profile is the strict source-security gate for code proposed
@@ -46,7 +44,7 @@ Job Object resource controls remain a separate availability mechanism.
   and every explicitly declared protected-runner label before zizmor audits
   the workflows with its pedantic security ruleset;
 - mypy checks production source and the Pages audit hooks, while a separately
-  pinned strict Pyright gate covers 25 trust, parser, authority, replay,
+  pinned strict Pyright gate covers 36 trust, parser, authority, replay,
   publication, effectiveness, performance, architecture-policy, and API-policy
   files;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
@@ -266,6 +264,34 @@ The generated `assurance-case.md` records these boundaries for each run. Its
 next action is computed from actual applicability, completion, attached
 companion evidence, and active findings, so a passing coverage or deep-analysis
 lane is retained rather than incorrectly requested again.
+
+### Scanner launch boundary
+
+- A scanner that could not be launched (for example `fork` failing with
+  `EAGAIN` under the per-user `RLIMIT_NPROC` quota) or that ran without its
+  OS containment is recorded as a launch or containment failure with no exit
+  status; the tool run fails instead of being parsed as a clean result.
+- Windows scanners must be native PE images. `.bat`/`.cmd` shims are rejected
+  and `PATHEXT` excludes them, because `cmd.exe` re-parses arguments that can
+  contain repository-controlled filenames. Scanners still run with the target
+  as their working directory (Tach, Ruff, Gitleaks and others discover project
+  configuration there), with absolute executables and
+  `NoDefaultCurrentDirectoryInExePath=1` so helper lookups never search it.
+- The approved executable is held open from digest verification through
+  process exit: on Windows without write/delete sharing (it cannot be modified,
+  replaced or renamed), on POSIX by inode/ctime identity that fails the run if
+  the file is replaced or rewritten. Residual risk: on POSIX an in-place write
+  that is reverted before the post-run check within the filesystem's ctime
+  granularity is not prevented, and native libraries other than the executable
+  are only re-hashed after the run; keep scanner installs read-only to the
+  scanning identity.
+- Python runtime closures fail when a site directory contains a `*.pth`,
+  `sitecustomize`/`usercustomize`, module or package that no installed
+  distribution owns, and every remaining startup file is hashed.
+- On Linux the launch bootstrap is a child subreaper and kills descendants that
+  `setsid`/double-fork after the scanner exits. Elsewhere POSIX cleanup relies
+  on the process group plus a descendant snapshot taken before termination; a
+  descendant that leaves both before termination can outlive the scan there.
 
 ## Implemented additions and companion controls
 
@@ -552,7 +578,7 @@ negative fixtures name the exact expected verifier error so a broken trust-root
 or registry setup cannot masquerade as a successful rejection test:
 
 ```text
-uv run --frozen python scripts/validate-native-attestation-fixtures.py \
+uv run --frozen python scripts/validate_native_attestation_fixtures.py \
   security-data/native-attestation-fixtures/manifest.json \
   --manifest-sha256 "$APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256"
 ```
@@ -625,7 +651,7 @@ Run the live authority conformance harness for every configured checkpoint
 authority (and every quorum member) before admission:
 
 ```text
-uv run --frozen python scripts/validate-checkpoint-authority.py \
+uv run --frozen python scripts/validate_checkpoint_authority.py \
   --prefix PYSEC_CHECKPOINT_CONFORMANCE
 ```
 
@@ -646,7 +672,14 @@ retain every OCI descriptor blob, validate config diff IDs, safely parse each
 layer, and bind signature-envelope and provenance blobs.
 RFC 3161 contexts may provide two to five independent authorities; quorum mode
 requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
-seconds, and rejects clock rollback or same-challenge forks.
+seconds, and rejects clock rollback or same-challenge forks. Independence uses
+normalized authority names (NFKC, case-folded, whitespace-collapsed) and
+distinct trust anchors, signer SPKIs and signer certificates, not evidence-file
+digests. Every quorum authority must be bound in `PYSEC_TSA_AUTHORITIES` as
+`name=<SHA-256 of the DER trust-anchor certificate>`. For legacy receipts, the
+anchor is the pinned signer certificate. One anchor cannot be bound to two
+names. A TSA certificate revoked for key or CA compromise, or with an
+unspecified or absent reason, invalidates every receipt whatever its date.
 The KMS operation must pass
 through its digest-pinned launcher and preserve an mTLS/TLS 1.3 transcript,
 endpoint allowlist, peer identity, and launcher identity that publication

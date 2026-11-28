@@ -158,8 +158,8 @@ def build_stage_argv(
         )
     command.extend(
         [
-            "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace",
-            "--env=PYSEC_BENCHMARK_CORPUS=/corpus/input",
+            "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace",  # pragma: allowlist secret
+            "--env=PYSEC_BENCHMARK_CORPUS=/corpus/input",  # pragma: allowlist secret
             *(f"--env={name}" for name in sorted(stage["environment"])),
         ]
     )

@@ -1,7 +1,5 @@
 # Governed release readiness
 
-Last reviewed: 2026-08-30
-
 `pysec release-check` produces one fail-closed promotion decision from sealed,
 digest-bound evidence. It is intended for an enterprise admission job after the
 scan and build lanes finish. It does not deploy, sign, contact a network, or

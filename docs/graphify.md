@@ -1,7 +1,5 @@
 # Graphify code-graph integration
 
-Last reviewed: 2026-08-13
-
 Graphify adds a deterministic code-property graph to the suite's finding,
 architecture, complexity, coverage, and reachability perspectives. The adapter
 uses the `graphifyy` package and runs only this bounded command:

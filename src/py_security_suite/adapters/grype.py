@@ -95,11 +95,13 @@ class GrypeAdapter(ScannerAdapter):
         findings: list[Finding] = []
         for match in matches:
             if not isinstance(match, dict):
-                continue
+                raise TypeError("Grype match must be an object")
             vulnerability = match.get("vulnerability") or {}
             artifact = match.get("artifact") or {}
             if not isinstance(vulnerability, dict) or not isinstance(artifact, dict):
-                continue
+                raise TypeError(
+                    "Grype match vulnerability and artifact must be objects"
+                )
             advisory = str(vulnerability.get("id") or "GRYPE-UNKNOWN")
             package = str(artifact.get("name") or "unknown")
             version = str(artifact.get("version") or "unknown")

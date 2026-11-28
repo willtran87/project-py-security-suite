@@ -196,7 +196,7 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
         self.assertFalse((destination / ".git").exists())
         self.assertFalse((destination / ".github" / "codeql").exists())
 
-    def test_codeql_completed_run_uses_only_generated_sarif(self) -> None:
+    def test_codeql_generated_sarif_without_coverage_is_unknown(self) -> None:
         adapter = CodeQlAdapter(ToolConfig(executable="run-codeql"), 4096)
 
         def run_codeql(command: list[str], **kwargs: object) -> RawExecution:
@@ -220,7 +220,8 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
         ):
             result = adapter.run(self.target)
 
-        self.assertEqual(result.tool_run.status, ToolStatus.COMPLETED)
+        self.assertEqual(result.tool_run.status, ToolStatus.PARSE_ERROR)
+        self.assertEqual(result.diagnostic["analysis_coverage"]["state"], "unknown")
         self.assertTrue(result.diagnostic["target_mirrored"])
         self.assertFalse(result.diagnostic["repository_codeql_config_used"])
         self.assertFalse(result.diagnostic["auto_download_allowed"])

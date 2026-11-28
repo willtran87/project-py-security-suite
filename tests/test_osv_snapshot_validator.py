@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import runpy
 import tempfile
 import unittest
 import zipfile
@@ -10,17 +9,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from scripts import validate_osv_snapshot
+
 
 class OsvSnapshotValidatorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(
             self.enterContext(tempfile.TemporaryDirectory())  # pylint: disable=R1732
         )
-        namespace = runpy.run_path(
-            str(Path(__file__).parents[1] / "scripts" / "validate-osv-snapshot.py")
-        )
         self.validate = cast(
-            Callable[[Path, str], dict[str, Any]], namespace["validate_snapshot"]
+            Callable[[Path, str], dict[str, Any]],
+            validate_osv_snapshot.validate_snapshot,
         )
 
     def test_valid_snapshot_returns_bounded_receipt(self) -> None:

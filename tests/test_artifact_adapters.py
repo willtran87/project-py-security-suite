@@ -80,7 +80,9 @@ class ArtifactAdapterTests(unittest.TestCase):
     def test_distribution_extraction_rejects_path_traversal(self) -> None:
         with zipfile.ZipFile(self.wheel, "w") as archive:
             archive.writestr("../outside.txt", "must not escape")
-        with self.assertRaisesRegex(ValueError, "escapes extraction root"):
+        with self.assertRaisesRegex(
+            ValueError, "unsafe archive member path|escapes extraction root"
+        ):
             with extracted_distribution_tree(
                 self.target, ToolConfig(artifacts_path=Path("dist"))
             ):
@@ -271,7 +273,7 @@ class ArtifactAdapterTests(unittest.TestCase):
             "run-codeql", self.target
         )
         self.assertEqual(command[command.index("--lang") + 1], "python")
-        self.assertEqual(command[command.index("--config") + 1], "")
+        self.assertIn("--config=", command)
         self.assertNotIn("--no-fail", command)
 
 

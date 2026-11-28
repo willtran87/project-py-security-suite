@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "scope": "Engineering targets for the Python source-security profile on the public external corpus. These targets are not an industry certification or production approval.",
+  "required_engines": [
+    "bandit",
+    "semgrep",
+    "codeql"
+  ],
+  "by_cwe": {
+    "CWE-22": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-328": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-330": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-501": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-502": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-601": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-611": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-614": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-643": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-78": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-79": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-89": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-90": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    },
+    "CWE-94": {
+      "minimum_precision": 0.8,
+      "minimum_recall": 0.8,
+      "maximum_false_positive_rate": 0.1,
+      "minimum_positive_cases": 5,
+      "minimum_negative_cases": 5
+    }
+  }
+}

@@ -67,6 +67,16 @@ def test_durable_security_event_log_must_be_outside_workspace(
         DurableJsonlSecurityEventSink(workspace / "events.jsonl", workspace=workspace)
 
 
+def test_durable_security_event_log_rejects_non_file_destination(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "event-log"
+    destination.mkdir()
+
+    with pytest.raises(ValueError, match="unsafe"):
+        DurableJsonlSecurityEventSink(destination)
+
+
 def test_security_event_log_head_is_signed_and_relying_party_anchored(
     tmp_path: Path,
 ) -> None:
