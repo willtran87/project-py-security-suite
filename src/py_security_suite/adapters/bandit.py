@@ -18,13 +18,17 @@ from .coverage import native_coverage, reconcile_coverage
 from .staging import maintained_files, python_scan_tree
 from .literal_sql import refine_literal_sql
 from .common import map_confidence, map_severity
+from .detect_secrets import is_suite_repository
 
 
 class BanditAdapter(ScannerAdapter):
     name = "bandit"
     accepted_exit_codes = frozenset({0, 1})
+    # Decided on the real target in run(); build_command only sees the mirror.
+    _suite_target = False
 
     def run(self, target: Path) -> AdapterResult:
+        self._suite_target = is_suite_repository(target)
         with python_scan_tree(target) as mirror:
             before = {
                 path.relative_to(mirror).as_posix(): sha256_file(path)
@@ -78,8 +82,8 @@ class BanditAdapter(ScannerAdapter):
             "json",
             "-q",
             # Target-controlled "# nosec" comments must not suppress findings;
-            # exceptions are governed by suite risk acceptance instead.
-            "--ignore-nosec",
+            # only the suite's own reviewed checkout keeps its inline pragmas.
+            *(() if self._suite_target else ("--ignore-nosec",)),
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:

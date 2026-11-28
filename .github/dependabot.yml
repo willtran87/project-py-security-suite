@@ -45,6 +45,11 @@ updates:
     groups:
       scanner-image:
         patterns: ["*"]
+    ignore:
+      # containers/scanner/pyproject.toml requires Python >=3.11,<3.14; newer
+      # interpreters break the locked native wheels (for example cffi).
+      - dependency-name: python
+        versions: [">=3.14"]
     cooldown:
       default-days: 7
     schedule:

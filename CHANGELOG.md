@@ -55,6 +55,9 @@ versioned heading when a release is tagged.
   and reviewed inline `nosemgrep` pragmas still apply when the installed suite
   and the mounted checkout live at different paths. Third-party targets keep
   fail-closed suppression handling.
+- The suite's own self-scan now also honours its reviewed Bandit `# nosec`
+  pragmas, matching the Semgrep and detect-secrets handling. Third-party
+  targets still run with `--ignore-nosec`.
 - Python scanner runtime closures now stream each file's SHA-256 under a 1 GiB
   per-file bound. Semgrep's 273 MB Linux engine exceeded the old 256 MiB
   in-memory cap, which broke native Semgrep qualification.
