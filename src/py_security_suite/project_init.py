@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .config import PROFILE_TOOLS
+from .config_profiles import PROFILE_TOOLS
 
 PROJECT_TEMPLATES = (
     "api",

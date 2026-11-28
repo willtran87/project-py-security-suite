@@ -6,1060 +6,359 @@ import json
 import os
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from .cli_parser import build_parser as build_parser
 
-from .cli_scan import add_scan_arguments, progress_sink
-from .cli_recovery import add_recovery_commands, recovery_command
-from .scan_control import ScanControl, controlled_scan
-from .version import __version__
-from .adapter_conformance import (
-    assess_adapter_conformance,
-    render_adapter_conformance,
-)
-from .advanced_delta import compare_advanced_analysis, render_advanced_delta_markdown
-from .baseline_candidate import build_baseline_candidate
-from .bundle_qualification import (
-    qualify_bundle,
-    render_bundle_qualification,
-    render_bundle_qualification_markdown,
-)
-from .audit_package import create_audit_package, verify_audit_package
-from .audience_report import AUDIENCES, build_audience_report, render_audience_markdown
-from .ci_workflow import build_github_workflow, render_workflow_receipt
-from .closure_plan import build_closure_plan, render_closure_plan_markdown
-from .config import ConfigurationError, PROFILE_TOOLS, load_config
-from .config_advisor import (
-    advise_configuration,
-    render_config_advice,
-    render_config_advice_markdown,
-)
-from .config_provenance import build_config_provenance
-from .confidential_archive import decrypt_report, encrypt_report
-from .report_retention import purge_verified_report, retention_status
-from .doctor import assess_readiness, render_readiness, render_readiness_markdown
-from .evidence_draft import build_governance_evidence_draft
-from .evidence_pack import create_evidence_pack, verify_evidence_pack
-from .finding_register import build_finding_register
-from .github_annotations import build_github_annotations, render_github_commands
-from .effectiveness_corpus import evaluate_report_corpus
-from .benchmark_execution import execute_benchmark_manifest
-from .benchmark_runtime import (
-    BenchmarkRuntimeError,
-    probe_oci_runtime_capabilities,
-)
-from .benchmark_compiler import compile_benchmark_manifest
-from .benchmark_adapters import benchmark_execution_contracts
-from .benchmark_assurance import BENCHMARK_REPLAY_GENESIS_SHA256
-from .benchmark_signing import (
-    ExternalEd25519SigningProvider,
-    load_external_signing_provider_profile,
-    verify_signing_provider_conformance,
-)
-from .benchmark_telemetry import (
-    DurableJsonlSecurityEventSink,
-    verify_durable_security_event_log,
-)
-from .path_safety import read_regular_file
-from .assurance_catalog import (
-    build_standards_source_manifest,
-    export_assurance_catalog,
-)
-from .execution import sanitize_terminal_text
-from .native_bundle import (
-    render_native_bundle_verification,
-    render_native_bundle_verification_markdown,
-    verify_native_bundle,
-)
-from .orchestrator import scan_project
-from .operational_trend import (
-    build_operational_trend,
-    render_operational_trend_markdown,
-)
-from .policy import exit_code
-from .policy_simulation import simulate_policy
-from .precommit_config import build_precommit_config, render_precommit_receipt
-from .project_init import (
-    PROJECT_TEMPLATES,
-    build_init_receipt,
-    project_profile,
-    render_init_receipt,
-    render_project_config,
-)
-from .provisioning import (
-    build_provision_plan,
-    render_provision_plan,
-    render_provision_plan_markdown,
-)
-from .portfolio_dashboard import build_portfolio_dashboard
-from .promotion import (
-    build_promotion_plan,
-    render_promotion_html,
-    render_promotion_markdown,
-)
-from .coverage_merge import merge_coverage_scenarios
-from .passport import (
-    create_attestation,
-    sign_release_artifacts,
-    verify_attestation,
-    verify_report,
-)
-from .path_safety import resolve_regular_directory, resolve_unlinked_path
-from .report_inspection import (
-    BUNDLED_SCHEMA_RESOURCES,
-    inspect_report,
-    read_bundled_schema,
-    report_verification_receipt,
-    render_inspection,
-    verify_inspection,
-)
-from .reports import is_complete_report
-from .reachability import analyze_project
-from .reachability_delta import compare_reachability
-from .release_payload import prepare_signing_request, verify_signing_request
-from .release_manifest import (
-    build_release_evidence_manifest,
-    verify_release_evidence_manifest,
-)
-from .release_readiness import assess_release_readiness
-from .reproducibility import (
-    compare_builds,
-    normalize_sdist,
-    render_reproducibility_markdown,
-)
-from .standards_monitor import (
-    monitor_standard_sources,
-    verify_standards_monitor_report,
-)
-from .trusted_observation import governed_now, scan_time_identity
-from .cli_benchmark_arguments import add_benchmark_commands
-from .cli_release_arguments import add_release_check_command
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    from .cli_scan import progress_sink
+    from .cli_recovery import recovery_command
+    from .scan_control import ScanControl, controlled_scan
+    from .adapter_conformance import (
+        assess_adapter_conformance,
+        render_adapter_conformance,
+    )
+    from .advanced_delta import (
+        compare_advanced_analysis,
+        render_advanced_delta_markdown,
+    )
+    from .baseline_candidate import build_baseline_candidate
+    from .bundle_qualification import (
+        qualify_bundle,
+        render_bundle_qualification,
+        render_bundle_qualification_markdown,
+    )
+    from .audit_package import create_audit_package, verify_audit_package
+    from .audience_report import build_audience_report, render_audience_markdown
+    from .ci_workflow import build_github_workflow, render_workflow_receipt
+    from .closure_plan import build_closure_plan, render_closure_plan_markdown
+    from .config import ConfigurationError, PROFILE_TOOLS, load_config
+    from .config_advisor import (
+        advise_configuration,
+        render_config_advice,
+        render_config_advice_markdown,
+    )
+    from .config_provenance import build_config_provenance
+    from .confidential_archive import decrypt_report, encrypt_report
+    from .report_retention import purge_verified_report, retention_status
+    from .doctor import assess_readiness, render_readiness, render_readiness_markdown
+    from .evidence_draft import build_governance_evidence_draft
+    from .evidence_pack import create_evidence_pack, verify_evidence_pack
+    from .finding_register import build_finding_register
+    from .github_annotations import build_github_annotations, render_github_commands
+    from .effectiveness_corpus import evaluate_report_corpus
+    from .benchmark_execution import execute_benchmark_manifest
+    from .benchmark_runtime import (
+        BenchmarkRuntimeError,
+        probe_oci_runtime_capabilities,
+    )
+    from .benchmark_compiler import compile_benchmark_manifest
+    from .benchmark_adapters import benchmark_execution_contracts
+    from .benchmark_signing import (
+        ExternalEd25519SigningProvider,
+        load_external_signing_provider_profile,
+        verify_signing_provider_conformance,
+    )
+    from .benchmark_telemetry import (
+        DurableJsonlSecurityEventSink,
+        verify_durable_security_event_log,
+    )
+    from .path_safety import read_regular_file
+    from .assurance_catalog import (
+        build_standards_source_manifest,
+        export_assurance_catalog,
+    )
+    from .execution import sanitize_terminal_text
+    from .native_bundle import (
+        render_native_bundle_verification,
+        render_native_bundle_verification_markdown,
+        verify_native_bundle,
+    )
+    from .orchestrator import scan_project
+    from .operational_trend import (
+        build_operational_trend,
+        render_operational_trend_markdown,
+    )
+    from .policy import exit_code
+    from .policy_simulation import simulate_policy
+    from .precommit_config import build_precommit_config, render_precommit_receipt
+    from .project_init import (
+        build_init_receipt,
+        project_profile,
+        render_init_receipt,
+        render_project_config,
+    )
+    from .provisioning import (
+        build_provision_plan,
+        render_provision_plan,
+        render_provision_plan_markdown,
+    )
+    from .portfolio_dashboard import build_portfolio_dashboard
+    from .promotion import (
+        build_promotion_plan,
+        render_promotion_html,
+        render_promotion_markdown,
+    )
+    from .coverage_merge import merge_coverage_scenarios
+    from .passport import (
+        create_attestation,
+        sign_release_artifacts,
+        verify_attestation,
+        verify_report,
+    )
+    from .path_safety import resolve_regular_directory, resolve_unlinked_path
+    from .report_inspection import (
+        inspect_report,
+        read_bundled_schema,
+        report_verification_receipt,
+        render_inspection,
+        verify_inspection,
+    )
+    from .reports import is_complete_report
+    from .reachability import analyze_project
+    from .reachability_delta import compare_reachability
+    from .release_payload import prepare_signing_request, verify_signing_request
+    from .release_manifest import (
+        build_release_evidence_manifest,
+        verify_release_evidence_manifest,
+    )
+    from .release_readiness import assess_release_readiness
+    from .reproducibility import (
+        compare_builds,
+        normalize_sdist,
+        render_reproducibility_markdown,
+    )
+    from .standards_monitor import (
+        monitor_standard_sources,
+        verify_standards_monitor_report,
+    )
+    from .trusted_observation import governed_now, scan_time_identity
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="pysec",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=(
-            "Run an offline-first portfolio of security scanners against a "
-            "Python project and generate one coordinated report artifact."
-        ),
-        epilog=(
-            "Start here:\n"
-            "  pysec init PROJECT --template library\n"
-            "  pysec doctor PROJECT --config PROJECT/pysec.toml --explain\n"
-            "  pysec provision-plan PROJECT --config PROJECT/pysec.toml\n"
-            "  pysec scan PROJECT --config PROJECT/pysec.toml --network-isolated "
-            "--output PROJECT/.artifacts/pysec-report\n"
-            "  pysec inspect PROJECT/.artifacts/pysec-report"
-        ),
-    )
-    parser.add_argument("--version", action="version", version=__version__)
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    add_recovery_commands(subparsers)
+# Subcommand implementations are imported when a command is dispatched, so
+# ``pysec --help``, ``--version`` and usage errors do not load the scanning,
+# reporting and trust stack. Keep this table in sync with the TYPE_CHECKING
+# imports above, and start every function that uses one of these names with
+# ``_load_command_dependencies()`` so it also works when called directly
+# (tests/test_cli_lazy_imports.py enforces both rules).
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "BenchmarkRuntimeError": (".benchmark_runtime", "BenchmarkRuntimeError"),
+    "ConfigurationError": (".config", "ConfigurationError"),
+    "DurableJsonlSecurityEventSink": (
+        ".benchmark_telemetry",
+        "DurableJsonlSecurityEventSink",
+    ),
+    "Ed25519PublicKey": (
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        "Ed25519PublicKey",
+    ),
+    "ExternalEd25519SigningProvider": (
+        ".benchmark_signing",
+        "ExternalEd25519SigningProvider",
+    ),
+    "PROFILE_TOOLS": (".config", "PROFILE_TOOLS"),
+    "ScanControl": (".scan_control", "ScanControl"),
+    "advise_configuration": (".config_advisor", "advise_configuration"),
+    "analyze_project": (".reachability", "analyze_project"),
+    "assess_adapter_conformance": (
+        ".adapter_conformance",
+        "assess_adapter_conformance",
+    ),
+    "assess_readiness": (".doctor", "assess_readiness"),
+    "assess_release_readiness": (".release_readiness", "assess_release_readiness"),
+    "benchmark_execution_contracts": (
+        ".benchmark_adapters",
+        "benchmark_execution_contracts",
+    ),
+    "build_audience_report": (".audience_report", "build_audience_report"),
+    "build_baseline_candidate": (".baseline_candidate", "build_baseline_candidate"),
+    "build_closure_plan": (".closure_plan", "build_closure_plan"),
+    "build_config_provenance": (".config_provenance", "build_config_provenance"),
+    "build_finding_register": (".finding_register", "build_finding_register"),
+    "build_github_annotations": (".github_annotations", "build_github_annotations"),
+    "build_github_workflow": (".ci_workflow", "build_github_workflow"),
+    "build_governance_evidence_draft": (
+        ".evidence_draft",
+        "build_governance_evidence_draft",
+    ),
+    "build_init_receipt": (".project_init", "build_init_receipt"),
+    "build_operational_trend": (".operational_trend", "build_operational_trend"),
+    "build_portfolio_dashboard": (".portfolio_dashboard", "build_portfolio_dashboard"),
+    "build_precommit_config": (".precommit_config", "build_precommit_config"),
+    "build_promotion_plan": (".promotion", "build_promotion_plan"),
+    "build_provision_plan": (".provisioning", "build_provision_plan"),
+    "build_release_evidence_manifest": (
+        ".release_manifest",
+        "build_release_evidence_manifest",
+    ),
+    "build_standards_source_manifest": (
+        ".assurance_catalog",
+        "build_standards_source_manifest",
+    ),
+    "compare_advanced_analysis": (".advanced_delta", "compare_advanced_analysis"),
+    "compare_builds": (".reproducibility", "compare_builds"),
+    "compare_reachability": (".reachability_delta", "compare_reachability"),
+    "compile_benchmark_manifest": (".benchmark_compiler", "compile_benchmark_manifest"),
+    "controlled_scan": (".scan_control", "controlled_scan"),
+    "create_attestation": (".passport", "create_attestation"),
+    "create_audit_package": (".audit_package", "create_audit_package"),
+    "create_evidence_pack": (".evidence_pack", "create_evidence_pack"),
+    "decrypt_report": (".confidential_archive", "decrypt_report"),
+    "encrypt_report": (".confidential_archive", "encrypt_report"),
+    "evaluate_report_corpus": (".effectiveness_corpus", "evaluate_report_corpus"),
+    "execute_benchmark_manifest": (
+        ".benchmark_execution",
+        "execute_benchmark_manifest",
+    ),
+    "exit_code": (".policy", "exit_code"),
+    "export_assurance_catalog": (".assurance_catalog", "export_assurance_catalog"),
+    "governed_now": (".trusted_observation", "governed_now"),
+    "inspect_report": (".report_inspection", "inspect_report"),
+    "is_complete_report": (".reports", "is_complete_report"),
+    "load_config": (".config", "load_config"),
+    "load_external_signing_provider_profile": (
+        ".benchmark_signing",
+        "load_external_signing_provider_profile",
+    ),
+    "merge_coverage_scenarios": (".coverage_merge", "merge_coverage_scenarios"),
+    "monitor_standard_sources": (".standards_monitor", "monitor_standard_sources"),
+    "normalize_sdist": (".reproducibility", "normalize_sdist"),
+    "prepare_signing_request": (".release_payload", "prepare_signing_request"),
+    "probe_oci_runtime_capabilities": (
+        ".benchmark_runtime",
+        "probe_oci_runtime_capabilities",
+    ),
+    "progress_sink": (".cli_scan", "progress_sink"),
+    "project_profile": (".project_init", "project_profile"),
+    "purge_verified_report": (".report_retention", "purge_verified_report"),
+    "qualify_bundle": (".bundle_qualification", "qualify_bundle"),
+    "read_bundled_schema": (".report_inspection", "read_bundled_schema"),
+    "read_regular_file": (".path_safety", "read_regular_file"),
+    "recovery_command": (".cli_recovery", "recovery_command"),
+    "render_adapter_conformance": (
+        ".adapter_conformance",
+        "render_adapter_conformance",
+    ),
+    "render_advanced_delta_markdown": (
+        ".advanced_delta",
+        "render_advanced_delta_markdown",
+    ),
+    "render_audience_markdown": (".audience_report", "render_audience_markdown"),
+    "render_bundle_qualification": (
+        ".bundle_qualification",
+        "render_bundle_qualification",
+    ),
+    "render_bundle_qualification_markdown": (
+        ".bundle_qualification",
+        "render_bundle_qualification_markdown",
+    ),
+    "render_closure_plan_markdown": (".closure_plan", "render_closure_plan_markdown"),
+    "render_config_advice": (".config_advisor", "render_config_advice"),
+    "render_config_advice_markdown": (
+        ".config_advisor",
+        "render_config_advice_markdown",
+    ),
+    "render_github_commands": (".github_annotations", "render_github_commands"),
+    "render_init_receipt": (".project_init", "render_init_receipt"),
+    "render_inspection": (".report_inspection", "render_inspection"),
+    "render_native_bundle_verification": (
+        ".native_bundle",
+        "render_native_bundle_verification",
+    ),
+    "render_native_bundle_verification_markdown": (
+        ".native_bundle",
+        "render_native_bundle_verification_markdown",
+    ),
+    "render_operational_trend_markdown": (
+        ".operational_trend",
+        "render_operational_trend_markdown",
+    ),
+    "render_precommit_receipt": (".precommit_config", "render_precommit_receipt"),
+    "render_project_config": (".project_init", "render_project_config"),
+    "render_promotion_html": (".promotion", "render_promotion_html"),
+    "render_promotion_markdown": (".promotion", "render_promotion_markdown"),
+    "render_provision_plan": (".provisioning", "render_provision_plan"),
+    "render_provision_plan_markdown": (
+        ".provisioning",
+        "render_provision_plan_markdown",
+    ),
+    "render_readiness": (".doctor", "render_readiness"),
+    "render_readiness_markdown": (".doctor", "render_readiness_markdown"),
+    "render_reproducibility_markdown": (
+        ".reproducibility",
+        "render_reproducibility_markdown",
+    ),
+    "render_workflow_receipt": (".ci_workflow", "render_workflow_receipt"),
+    "report_verification_receipt": (
+        ".report_inspection",
+        "report_verification_receipt",
+    ),
+    "resolve_regular_directory": (".path_safety", "resolve_regular_directory"),
+    "resolve_unlinked_path": (".path_safety", "resolve_unlinked_path"),
+    "retention_status": (".report_retention", "retention_status"),
+    "sanitize_terminal_text": (".execution", "sanitize_terminal_text"),
+    "scan_project": (".orchestrator", "scan_project"),
+    "scan_time_identity": (".trusted_observation", "scan_time_identity"),
+    "serialization": ("cryptography.hazmat.primitives", "serialization"),
+    "sign_release_artifacts": (".passport", "sign_release_artifacts"),
+    "simulate_policy": (".policy_simulation", "simulate_policy"),
+    "verify_attestation": (".passport", "verify_attestation"),
+    "verify_audit_package": (".audit_package", "verify_audit_package"),
+    "verify_durable_security_event_log": (
+        ".benchmark_telemetry",
+        "verify_durable_security_event_log",
+    ),
+    "verify_evidence_pack": (".evidence_pack", "verify_evidence_pack"),
+    "verify_inspection": (".report_inspection", "verify_inspection"),
+    "verify_native_bundle": (".native_bundle", "verify_native_bundle"),
+    "verify_release_evidence_manifest": (
+        ".release_manifest",
+        "verify_release_evidence_manifest",
+    ),
+    "verify_report": (".passport", "verify_report"),
+    "verify_signing_provider_conformance": (
+        ".benchmark_signing",
+        "verify_signing_provider_conformance",
+    ),
+    "verify_signing_request": (".release_payload", "verify_signing_request"),
+    "verify_standards_monitor_report": (
+        ".standards_monitor",
+        "verify_standards_monitor_report",
+    ),
+}
 
-    initialize = subparsers.add_parser(
-        "init", help="create a minimal offline-first repository configuration"
-    )
-    initialize.add_argument(
-        "target", type=Path, help="existing repository directory to initialize"
-    )
-    initialize.add_argument(
-        "--template",
-        choices=PROJECT_TEMPLATES,
-        default="library",
-        help="project shape used for profile and reachability guidance",
-    )
-    initialize.add_argument(
-        "--profile",
-        choices=sorted(PROFILE_TOOLS),
-        help="override the template-recommended scan profile",
-    )
-    initialize.add_argument(
-        "--output",
-        type=Path,
-        help="configuration path inside TARGET (default: TARGET/pysec.toml)",
-    )
-    initialize.add_argument(
-        "--format",
-        choices=("text", "json"),
-        default="text",
-        help="concise guidance or schema-governed initialization receipt",
-    )
-    initialize.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="explicitly replace an existing regular configuration file",
-    )
 
-    add_scan_arguments(subparsers.add_parser("scan", help="scan a Python project"))
+def __getattr__(name: str) -> Any:
+    try:
+        module, attribute = _LAZY_IMPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    value = getattr(import_module(module, __package__), attribute)
+    globals()[name] = value
+    return value
 
-    encrypt = subparsers.add_parser(
-        "encrypt-report", help="encrypt a verified report for X25519 transport"
-    )
-    encrypt.add_argument("report", type=Path)
-    encrypt.add_argument("--output", type=Path, required=True)
-    encrypt.add_argument("--recipient-public-key", type=Path, required=True)
-    encrypt.add_argument("--recipient-public-key-sha256", required=True)
-    encrypt.add_argument("--key-lifecycle-receipt", type=Path, required=True)
-    encrypt.add_argument("--key-lifecycle-receipt-sha256", required=True)
-    encrypt.add_argument("--key-authority-public-key", type=Path, required=True)
-    encrypt.add_argument("--key-authority-public-key-sha256", required=True)
-    encrypt.add_argument("--key-lifecycle-signature", type=Path, required=True)
-    encrypt.add_argument("--provider-attestation", type=Path, required=True)
-    encrypt.add_argument("--provider-attestation-sha256", required=True)
-    encrypt.add_argument("--provider-authority-public-key", type=Path, required=True)
-    encrypt.add_argument("--provider-authority-public-key-sha256", required=True)
-    encrypt.add_argument("--provider-attestation-signature", type=Path, required=True)
-    encrypt.add_argument("--trusted-time-context", type=Path, required=True)
-    encrypt.add_argument("--overwrite", action="store_true")
-    encrypt.add_argument(
-        "--delete-plaintext-after-encryption",
-        action="store_true",
-        help="delete the verified plaintext report after authenticated encryption",
-    )
 
-    retention = subparsers.add_parser(
-        "retention-status", help="verify a report and evaluate its retention deadline"
-    )
-    retention.add_argument("report", type=Path)
-    purge = subparsers.add_parser(
-        "purge-expired-report",
-        help="delete a verified report after its retention deadline",
-    )
-    purge.add_argument("report", type=Path)
-    purge.add_argument("--trusted-time-context", type=Path, required=True)
+def _load_command_dependencies() -> None:
+    """Bind every lazily imported name before a command runs.
 
-    doctor = subparsers.add_parser(
-        "doctor",
-        help="check profile prerequisites without executing scanners",
-    )
-    doctor.add_argument(
-        "target", type=Path, help="existing repository directory to assess"
-    )
-    doctor.add_argument("--config", type=Path, help="repository TOML configuration")
-    doctor.add_argument("--policy", type=Path, help="organization TOML policy")
-    doctor.add_argument(
-        "--profile",
-        choices=sorted(PROFILE_TOOLS),
-        help="override the configured profile for this assessment",
-    )
-    doctor.add_argument(
-        "--format",
-        choices=("text", "json", "markdown"),
-        default="text",
-        help="operator text, machine-readable JSON, or GitHub-ready Markdown",
-    )
-    doctor.add_argument(
-        "--explain",
-        action="store_true",
-        help="include ordered actions, reasons, identities, and selected controls",
-    )
-    doctor.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically publish the rendered result",
-    )
-    doctor.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="explicitly replace an existing regular output file",
-    )
-
-    provision = subparsers.add_parser(
-        "provision-plan",
-        help="plan offline prerequisites without downloading or changing files",
-    )
-    provision.add_argument("target", type=Path, help="repository directory to assess")
-    provision.add_argument("--config", type=Path, help="repository TOML configuration")
-    provision.add_argument("--policy", type=Path, help="organization TOML policy")
-    provision.add_argument(
-        "--profile",
-        choices=sorted(PROFILE_TOOLS),
-        help="override the configured profile",
-    )
-    provision.add_argument(
-        "--format",
-        choices=("text", "json", "markdown"),
-        default="text",
-        help="operator text, schema-governed JSON, or GitHub-ready Markdown",
-    )
-    provision.add_argument("--output", type=Path, metavar="FILE")
-    provision.add_argument("--overwrite", action="store_true")
-
-    attest = subparsers.add_parser(
-        "attest", help="create a portable, optionally signed Security Passport"
-    )
-    attest.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    attest.add_argument(
-        "--output", type=Path, required=True, metavar="PASSPORT_DIRECTORY"
-    )
-    signing = attest.add_mutually_exclusive_group(required=True)
-    signing.add_argument("--signing-key", type=Path)
-    signing.add_argument(
-        "--unsigned",
-        action="store_true",
-        help="prepare an integrity-only passport for a separate approval signer",
-    )
-    attest.add_argument("--cosign-executable", default="cosign")
-    attest.add_argument(
-        "--signing-password-file",
-        type=Path,
-        help="bounded file supplying COSIGN_PASSWORD without command-line exposure",
-    )
-    attest.add_argument("--cosign-sha256", default="")
-    attest.add_argument(
-        "--allow-signing-network",
-        action="store_true",
-        help="authorize Cosign v3 to contact configured signing services",
-    )
-    attest.add_argument(
-        "--signing-config",
-        type=Path,
-        help="reviewed Cosign v3 signing configuration (public or private service)",
-    )
-    attest.add_argument("--overwrite", action="store_true")
-
-    sign_artifacts = subparsers.add_parser(
-        "sign-artifacts",
-        help="create digest-bound Sigstore bundles for release distributions",
-    )
-    sign_artifacts.add_argument("artifacts", type=Path, metavar="ARTIFACT_DIRECTORY")
-    sign_artifacts.add_argument("--output", type=Path, required=True)
-    sign_artifacts.add_argument("--signing-key", type=Path, required=True)
-    sign_artifacts.add_argument("--signing-password-file", type=Path)
-    sign_artifacts.add_argument("--cosign-executable", default="cosign")
-    sign_artifacts.add_argument("--cosign-sha256", required=True)
-    sign_artifacts.add_argument("--allow-signing-network", action="store_true")
-    sign_artifacts.add_argument("--signing-config", type=Path)
-    sign_artifacts.add_argument("--overwrite", action="store_true")
-
-    prepare_signing = subparsers.add_parser(
-        "prepare-signing",
-        help="bind a verified report to an exact release payload for external signing",
-    )
-    prepare_signing.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    prepare_signing.add_argument("artifacts", type=Path, metavar="ARTIFACT_DIRECTORY")
-    prepare_signing.add_argument("--output", type=Path, required=True)
-    prepare_signing.add_argument("--overwrite", action="store_true")
-
-    verify_signing = subparsers.add_parser(
-        "verify-signing-request",
-        help="verify that an approved signing request still matches an exact payload",
-    )
-    verify_signing.add_argument("request", type=Path, metavar="REQUEST_FILE")
-    verify_signing.add_argument("artifacts", type=Path, metavar="ARTIFACT_DIRECTORY")
-    verify_signing.add_argument("--request-sha256", required=True)
-    verify_signing.add_argument("--format", choices=("text", "json"), default="text")
-    verify_signing.add_argument("--output", type=Path, metavar="FILE")
-    verify_signing.add_argument("--overwrite", action="store_true")
-
-    verify = subparsers.add_parser(
-        "verify", help="verify a Security Passport and optional source report"
-    )
-    verify.add_argument(
-        "passport",
-        type=Path,
-        metavar="PASSPORT_DIRECTORY",
-        help="portable passport directory created by 'pysec attest'",
-    )
-    verify.add_argument("--report", type=Path, metavar="REPORT_DIRECTORY")
-    verify.add_argument(
-        "--artifact-root",
-        type=Path,
-        metavar="DIRECTORY",
-        help="root containing release files at their Passport subject paths",
-    )
-    verify.add_argument("--public-key", type=Path)
-    verify.add_argument("--cosign-executable", default="cosign")
-    verify.add_argument("--cosign-sha256", default="")
-    verify.add_argument("--allow-unsigned", action="store_true")
-    verify.add_argument(
-        "--format",
-        choices=("json", "text"),
-        default="json",
-        help="machine-readable JSON or concise operator text",
-    )
-    verify.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically write the JSON verification receipt",
-    )
-    verify.add_argument("--overwrite", action="store_true")
-
-    verify_report_parser = subparsers.add_parser(
-        "verify-report", help="verify a generated report checksum chain"
-    )
-    verify_report_parser.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    verify_report_parser.add_argument(
-        "--format", choices=("text", "json"), default="text"
-    )
-    verify_report_parser.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically write the portable JSON verification receipt",
-    )
-    verify_report_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing report-verification receipt",
-    )
-
-    verify_inspection_parser = subparsers.add_parser(
-        "verify-inspection",
-        help="verify an inspection sidecar against its sealed report",
-    )
-    verify_inspection_parser.add_argument(
-        "inspection", type=Path, metavar="INSPECTION_FILE"
-    )
-    verify_inspection_parser.add_argument(
-        "--report", type=Path, required=True, metavar="REPORT_DIRECTORY"
-    )
-    verify_inspection_parser.add_argument(
-        "--format", choices=("text", "json"), default="text"
-    )
-    verify_inspection_parser.add_argument(
-        "--limit",
-        type=int,
-        default=5,
-        help="expected prioritized-action limit used during export (0-100)",
-    )
-    verify_inspection_parser.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically write the portable JSON verification receipt",
-    )
-    verify_inspection_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing verification receipt",
-    )
-
-    inspect = subparsers.add_parser(
-        "inspect", help="verify and summarize an existing report"
-    )
-    inspect.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    inspect.add_argument("--format", choices=("text", "json"), default="text")
-    inspect.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help=(
-            "atomically write the derived inspection beside, never inside, "
-            "the sealed report"
-        ),
-    )
-    inspect.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing inspection output file",
-    )
-    inspect.add_argument(
-        "--limit",
-        type=int,
-        default=5,
-        help="number of prioritized actions to show (0-100)",
-    )
-
-    schema = subparsers.add_parser(
-        "schema",
-        help="print or export an installed versioned report schema",
-    )
-    schema.add_argument(
-        "name",
-        choices=sorted(BUNDLED_SCHEMA_RESOURCES),
-        help="version-explicit bundled schema contract",
-    )
-    schema.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically export the schema for disconnected consumers",
-    )
-    schema.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing schema export",
-    )
-
-    list_tools = subparsers.add_parser(
-        "list-tools", help="show scanners selected by each profile"
-    )
-    list_tools.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
-    list_tools.add_argument("--format", choices=("text", "json"), default="text")
-
-    adapter_check = subparsers.add_parser(
-        "adapter-check",
-        help="validate the non-executing adapter SDK and registry contract",
-    )
-    adapter_check.add_argument("--format", choices=("text", "json"), default="text")
-    adapter_check.add_argument("--output", type=Path, metavar="FILE")
-    adapter_check.add_argument("--overwrite", action="store_true")
-
-    qualify = subparsers.add_parser(
-        "qualify-bundle",
-        help="join adapter contracts and activation-free profile readiness",
-    )
-    qualify.add_argument("target", type=Path, help="repository used for applicability")
-    qualify.add_argument("--config", type=Path)
-    qualify.add_argument("--policy", type=Path)
-    qualify.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
-    qualify.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    qualify.add_argument(
-        "--effectiveness-evaluation",
-        type=Path,
-        help="digest-bound labeled-corpus evaluation produced by 'pysec benchmark'",
-    )
-    qualify.add_argument(
-        "--effectiveness-report",
-        type=Path,
-        help="sealed report that produced the labeled-corpus evaluation",
-    )
-    qualify.add_argument("--effectiveness-sha256", default="")
-    qualify.add_argument("--minimum-effectiveness-labels", type=int, default=0)
-    qualify.add_argument("--minimum-effectiveness-tools", type=int, default=0)
-    qualify.add_argument(
-        "--required-effectiveness-tool",
-        action="append",
-        default=[],
-        help="require behavioral evidence for this scanner (repeatable)",
-    )
-    qualify.add_argument("--output", type=Path, metavar="FILE")
-    qualify.add_argument("--overwrite", action="store_true")
-
-    verify_bundle = subparsers.add_parser(
-        "verify-native-bundle",
-        help="verify the closed native scanner bundle and offline wheelhouse",
-    )
-    verify_bundle.add_argument("bundle", type=Path, help="transferred bundle directory")
-    verify_bundle.add_argument(
-        "--manifest-sha256",
-        default="",
-        help="independently transferred approved manifest digest",
-    )
-    verify_bundle.add_argument(
-        "--python",
-        type=Path,
-        help="trusted Python with pip used for no-index dependency resolution",
-    )
-    verify_bundle.add_argument(
-        "--require-wheelhouse-closure",
-        action="store_true",
-        help="fail unless every declared Python environment resolves with --no-index",
-    )
-    verify_bundle.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    verify_bundle.add_argument("--output", type=Path, metavar="FILE")
-    verify_bundle.add_argument("--overwrite", action="store_true")
-
-    generate_ci = subparsers.add_parser(
-        "generate-ci",
-        help="create a pinned GitHub workflow for a pre-provisioned isolated runner",
-    )
-    generate_ci.add_argument("target", type=Path, help="repository directory")
-    generate_ci.add_argument(
-        "--output",
-        type=Path,
-        help="workflow path inside target (default: .github/workflows/python-security.yml)",
-    )
-    generate_ci.add_argument(
-        "--profile", choices=sorted(PROFILE_TOOLS), default="production"
-    )
-    generate_ci.add_argument("--config", default="pysec.toml", metavar="REPO_PATH")
-    generate_ci.add_argument("--checkout-sha", required=True)
-    generate_ci.add_argument("--upload-artifact-sha", required=True)
-    generate_ci.add_argument("--upload-sarif-sha", required=True)
-    generate_ci.add_argument("--policy-variable", default="PYSEC_ORGANIZATION_POLICY")
-    generate_ci.add_argument(
-        "--isolation-command",
-        default="enterprise-verify-pysec-isolation",
-        help="one-line organization-owned isolation verification command",
-    )
-    generate_ci.add_argument(
-        "--runner-label",
-        action="append",
-        default=[],
-        help="repeat for each required self-hosted runner label",
-    )
-    generate_ci.add_argument("--format", choices=("text", "json"), default="text")
-    generate_ci.add_argument("--overwrite", action="store_true")
-
-    generate_hooks = subparsers.add_parser(
-        "generate-hooks",
-        help="create safe local pre-commit diagnostics without running scanners",
-    )
-    generate_hooks.add_argument("target", type=Path, help="repository directory")
-    generate_hooks.add_argument(
-        "--output",
-        type=Path,
-        help="hook configuration inside target (default: .pre-commit-config.yaml)",
-    )
-    generate_hooks.add_argument(
-        "--profile", choices=sorted(PROFILE_TOOLS), default="quick"
-    )
-    generate_hooks.add_argument("--config", default="pysec.toml", metavar="REPO_PATH")
-    generate_hooks.add_argument("--format", choices=("text", "json"), default="text")
-    generate_hooks.add_argument("--overwrite", action="store_true")
-
-    config_check = subparsers.add_parser(
-        "config-check",
-        help="validate configuration and provide migration and portability advice",
-    )
-    config_check.add_argument("--config", type=Path, required=True)
-    config_check.add_argument("--policy", type=Path)
-    config_check.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
-    config_check.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    config_check.add_argument("--output", type=Path, metavar="FILE")
-    config_check.add_argument("--overwrite", action="store_true")
-
-    add_benchmark_commands(
-        subparsers,
-        replay_genesis_sha256=BENCHMARK_REPLAY_GENESIS_SHA256,
-    )
-
-    standards_build = subparsers.add_parser(
-        "standards-manifest-build",
-        help="compile verified local baselines into a standards monitor manifest",
-    )
-    standards_build.add_argument("inventory", type=Path, metavar="BASELINE_INVENTORY")
-    standards_build.add_argument("--standard", action="append", default=[])
-    standards_build.add_argument("--output", type=Path, required=True, metavar="FILE")
-    standards_build.add_argument("--overwrite", action="store_true")
-
-    standards_monitor = subparsers.add_parser(
-        "standards-monitor",
-        help="quarantine publisher snapshots and report standards lifecycle changes",
-    )
-    standards_monitor.add_argument("manifest", type=Path, metavar="SOURCE_MANIFEST")
-    standards_monitor.add_argument(
-        "--output", type=Path, required=True, metavar="DIRECTORY"
-    )
-    standards_monitor.add_argument(
-        "--authorize-network",
-        action="store_true",
-        help="confirm authorization for restricted HTTPS publisher retrieval",
-    )
-    standards_monitor.add_argument("--signing-key", type=Path)
-    standards_monitor.add_argument("--overwrite", action="store_true")
-
-    standards_verify = subparsers.add_parser(
-        "standards-monitor-verify",
-        help="verify a signed standards publisher lifecycle report",
-    )
-    standards_verify.add_argument("report", type=Path)
-    standards_verify.add_argument("--report-sha256", required=True)
-    standards_verify.add_argument("--public-key", type=Path, required=True)
-
-    add_release_check_command(subparsers)
-
-    evidence_draft = subparsers.add_parser(
-        "evidence-draft",
-        help="export a non-authoritative governance evidence handoff",
-    )
-    evidence_draft.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    evidence_draft.add_argument("--format", choices=("text", "json"), default="text")
-    evidence_draft.add_argument("--output", type=Path, metavar="FILE")
-    evidence_draft.add_argument("--overwrite", action="store_true")
-
-    promotion = subparsers.add_parser(
-        "promotion-plan",
-        help="consolidate lifecycle, assurance, baseline, reliability, and release actions",
-    )
-    promotion.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    promotion.add_argument("--release-readiness", type=Path)
-    promotion.add_argument("--release-readiness-sha256", default="")
-    promotion.add_argument("--operational-trend", type=Path)
-    promotion.add_argument("--operational-trend-sha256", default="")
-    promotion.add_argument(
-        "--format", choices=("text", "json", "markdown", "html"), default="text"
-    )
-    promotion.add_argument("--output", type=Path, metavar="FILE")
-    promotion.add_argument("--overwrite", action="store_true")
-
-    closure = subparsers.add_parser(
-        "closure-plan",
-        help="turn a verified report into an owned, evidence-based closure backlog",
-    )
-    closure.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    closure.add_argument(
-        "--coverage-target",
-        type=float,
-        default=90.0,
-        help="combined module coverage target used to select hotspots (default: 90)",
-    )
-    closure.add_argument(
-        "--hotspot-limit",
-        type=int,
-        default=10,
-        help="maximum number of source coverage hotspots (default: 10)",
-    )
-    closure.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    closure.add_argument("--output", type=Path, metavar="FILE")
-    closure.add_argument("--overwrite", action="store_true")
-
-    compare = subparsers.add_parser(
-        "compare-builds",
-        help="compare two independently produced artifact directories byte for byte",
-    )
-    compare.add_argument("first", type=Path, metavar="FIRST_BUILD_DIRECTORY")
-    compare.add_argument("second", type=Path, metavar="SECOND_BUILD_DIRECTORY")
-    compare.add_argument("--first-label", default="build-a")
-    compare.add_argument("--second-label", default="build-b")
-    compare.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    compare.add_argument("--output", type=Path, metavar="FILE")
-    compare.add_argument("--overwrite", action="store_true")
-
-    normalize = subparsers.add_parser(
-        "normalize-sdist",
-        help="rewrite one .tar.gz source distribution with deterministic metadata",
-    )
-    normalize.add_argument("source", type=Path, metavar="SOURCE_TAR_GZ")
-    normalize.add_argument("--output", type=Path, required=True, metavar="TAR_GZ")
-    normalize.add_argument(
-        "--source-date-epoch",
-        type=int,
-        required=True,
-        help="reviewed non-negative Unix epoch applied to every archive header",
-    )
-    normalize.add_argument("--format", choices=("text", "json"), default="text")
-    normalize.add_argument("--overwrite", action="store_true")
-
-    baseline_candidate = subparsers.add_parser(
-        "baseline-candidate",
-        help="prepare a verified, revision-bound findings report for external approval",
-    )
-    baseline_candidate.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    baseline_candidate.add_argument(
-        "--format", choices=("text", "json"), default="text"
-    )
-    baseline_candidate.add_argument("--output", type=Path, metavar="FILE")
-    baseline_candidate.add_argument("--overwrite", action="store_true")
-
-    trend = subparsers.add_parser(
-        "trend", help="compare 2-100 sealed reports for operational regressions"
-    )
-    trend.add_argument("reports", type=Path, nargs="+", metavar="REPORT_DIRECTORY")
-    trend.add_argument(
-        "--performance-regression-percent",
-        type=float,
-        default=50.0,
-        help="flag latest scanner duration increases above this percentage",
-    )
-    trend.add_argument("--maximum-total-seconds", type=float)
-    trend.add_argument(
-        "--tool-budget",
-        action="append",
-        default=[],
-        metavar="TOOL=SECONDS",
-        help="flag a latest scanner duration above its absolute budget (repeatable)",
-    )
-    trend.add_argument("--format", choices=("text", "json", "markdown"), default="text")
-    trend.add_argument("--output", type=Path, metavar="FILE")
-    trend.add_argument("--overwrite", action="store_true")
-
-    release_manifest = subparsers.add_parser(
-        "release-manifest",
-        help="bind independently approved release evidence into one closed manifest",
-    )
-    release_manifest.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    release_manifest.add_argument(
-        "--evidence",
-        action="append",
-        required=True,
-        metavar="NAME=PATH@SHA256",
-        help="digest-bound JSON evidence; repeat for every release input",
-    )
-    release_manifest.add_argument("--format", choices=("text", "json"), default="text")
-    release_manifest.add_argument("--output", type=Path, metavar="FILE")
-    release_manifest.add_argument("--overwrite", action="store_true")
-
-    verify_release_manifest = subparsers.add_parser(
-        "verify-release-manifest",
-        help="independently verify a closed release evidence manifest and its report",
-    )
-    verify_release_manifest.add_argument("manifest", type=Path, metavar="MANIFEST")
-    verify_release_manifest.add_argument("--manifest-sha256", required=True)
-    verify_release_manifest.add_argument("--report", type=Path, required=True)
-    verify_release_manifest.add_argument(
-        "--required-evidence",
-        action="append",
-        default=[],
-        metavar="NAME",
-        help="require an exact evidence name in the manifest (repeatable)",
-    )
-    verify_release_manifest.add_argument(
-        "--evidence-location",
-        action="append",
-        default=[],
-        metavar="NAME=PATH",
-        help="relocate a manifest evidence item after artifact transfer (repeatable)",
-    )
-    verify_release_manifest.add_argument(
-        "--format", choices=("text", "json"), default="text"
-    )
-    verify_release_manifest.add_argument("--output", type=Path, metavar="FILE")
-    verify_release_manifest.add_argument("--overwrite", action="store_true")
-
-    policy_simulation = subparsers.add_parser(
-        "policy-simulate",
-        help="evaluate a hypothetical admission policy against a sealed report",
-    )
-    policy_simulation.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    policy_simulation.add_argument("--block-severity", action="append", default=[])
-    policy_simulation.add_argument("--require-tool", action="append", default=[])
-    policy_simulation.add_argument(
-        "--minimum-confidence",
-        choices=("unknown", "low", "medium", "high"),
-        default="unknown",
-    )
-    policy_simulation.add_argument("--maximum-blocking-findings", type=int, default=0)
-    policy_simulation.add_argument("--format", choices=("text", "json"), default="text")
-    policy_simulation.add_argument("--output", type=Path, metavar="FILE")
-    policy_simulation.add_argument("--overwrite", action="store_true")
-
-    finding_register = subparsers.add_parser(
-        "finding-register",
-        help="build durable finding lifecycle and SLA state from a sealed report",
-    )
-    finding_register.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    finding_register.add_argument("--previous", type=Path)
-    finding_register.add_argument("--previous-sha256", default="")
-    finding_register.add_argument("--format", choices=("text", "json"), default="text")
-    finding_register.add_argument("--output", type=Path, metavar="FILE")
-    finding_register.add_argument("--overwrite", action="store_true")
-
-    annotations = subparsers.add_parser(
-        "github-annotations",
-        help="verify and render promotion-plan annotations for GitHub Actions",
-    )
-    annotations.add_argument("plan", type=Path, metavar="PROMOTION_PLAN")
-    annotations.add_argument("--plan-sha256", required=True)
-    annotations.add_argument("--report", type=Path, required=True)
-    annotations.add_argument("--format", choices=("github", "json"), default="github")
-    annotations.add_argument("--output", type=Path, metavar="FILE")
-    annotations.add_argument("--overwrite", action="store_true")
-
-    audit = subparsers.add_parser(
-        "audit-package",
-        help="create a deterministic portable package of a sealed report and evidence",
-    )
-    audit.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    audit.add_argument(
-        "--evidence", action="append", default=[], metavar="NAME=PATH@SHA256"
-    )
-    audit.add_argument("--output", type=Path, required=True, metavar="ZIP_FILE")
-    audit.add_argument("--overwrite", action="store_true")
-    audit.add_argument("--format", choices=("text", "json"), default="text")
-
-    verify_audit = subparsers.add_parser(
-        "verify-audit-package",
-        help="verify every file and embedded report in a portable audit package",
-    )
-    verify_audit.add_argument("package", type=Path, metavar="ZIP_FILE")
-    verify_audit.add_argument("--package-sha256", required=True)
-    verify_audit.add_argument("--format", choices=("text", "json"), default="text")
-    verify_audit.add_argument("--output", type=Path, metavar="RECEIPT_FILE")
-    verify_audit.add_argument("--overwrite", action="store_true")
-
-    merge_coverage = subparsers.add_parser(
-        "merge-coverage",
-        help="merge digest-bound coverage.py JSON from multiple runtime scenarios",
-    )
-    merge_coverage.add_argument(
-        "--scenario", action="append", required=True, metavar="NAME=PATH@SHA256"
-    )
-    merge_coverage.add_argument(
-        "--output", type=Path, required=True, metavar="COVERAGE_JSON"
-    )
-    merge_coverage.add_argument("--overwrite", action="store_true")
-
-    portfolio = subparsers.add_parser(
-        "portfolio",
-        help="aggregate 1-500 independently sealed repository reports",
-    )
-    portfolio.add_argument("reports", type=Path, nargs="+", metavar="REPORT_DIRECTORY")
-    portfolio.add_argument("--format", choices=("text", "json"), default="text")
-    portfolio.add_argument("--output", type=Path, metavar="FILE")
-    portfolio.add_argument("--overwrite", action="store_true")
-
-    config_provenance = subparsers.add_parser(
-        "config-provenance",
-        help="explain value-redacted origins of the validated effective configuration",
-    )
-    config_provenance.add_argument("--config", type=Path)
-    config_provenance.add_argument("--policy", type=Path)
-    config_provenance.add_argument("--profile", choices=tuple(PROFILE_TOOLS))
-    config_provenance.add_argument("--format", choices=("text", "json"), default="text")
-    config_provenance.add_argument("--output", type=Path, metavar="FILE")
-    config_provenance.add_argument("--overwrite", action="store_true")
-
-    audience_report = subparsers.add_parser(
-        "audience-report",
-        help="export one verified audience view from a promotion plan",
-    )
-    audience_report.add_argument("plan", type=Path, metavar="PROMOTION_PLAN")
-    audience_report.add_argument("--plan-sha256", required=True)
-    audience_report.add_argument("--report", type=Path, required=True)
-    audience_report.add_argument("--audience", choices=AUDIENCES, required=True)
-    audience_report.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    audience_report.add_argument("--output", type=Path, metavar="FILE")
-    audience_report.add_argument("--overwrite", action="store_true")
-
-    evidence_pack = subparsers.add_parser(
-        "evidence-pack",
-        help="atomically publish a closed, portable release evidence package",
-    )
-    evidence_pack.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    evidence_pack.add_argument(
-        "--output", type=Path, required=True, metavar="PACK_DIRECTORY"
-    )
-    evidence_pack.add_argument("--previous-register", type=Path)
-    evidence_pack.add_argument("--previous-register-sha256", default="")
-    evidence_pack.add_argument("--previous-report", type=Path)
-    evidence_pack.add_argument(
-        "--artifacts", type=Path, help="exact wheel/sdist/zip signing payload"
-    )
-    evidence_pack.add_argument("--config", type=Path)
-    evidence_pack.add_argument("--policy", type=Path)
-    evidence_pack.add_argument("--profile", choices=tuple(PROFILE_TOOLS))
-    release_inputs = evidence_pack.add_argument_group("governed release inputs")
-    release_inputs.add_argument("--effectiveness-evaluation", type=Path)
-    release_inputs.add_argument("--effectiveness-sha256", default="")
-    release_inputs.add_argument("--minimum-effectiveness-labels", type=int, default=0)
-    release_inputs.add_argument(
-        "--minimum-effectiveness-positive-labels", type=int, default=0
-    )
-    release_inputs.add_argument(
-        "--minimum-effectiveness-negative-labels", type=int, default=0
-    )
-    release_inputs.add_argument("--minimum-effectiveness-tools", type=int, default=0)
-    release_inputs.add_argument(
-        "--minimum-effectiveness-labels-per-tool", type=int, default=0
-    )
-    release_inputs.add_argument(
-        "--required-effectiveness-tool", action="append", default=[]
-    )
-    release_inputs.add_argument("--passport-verification", type=Path)
-    release_inputs.add_argument("--passport-verification-sha256", default="")
-    release_inputs.add_argument("--require-passport", action="store_true")
-    evidence_pack.add_argument("--block-severity", action="append", default=[])
-    evidence_pack.add_argument("--require-tool", action="append", default=[])
-    evidence_pack.add_argument(
-        "--minimum-confidence",
-        choices=("unknown", "low", "medium", "high"),
-        default="unknown",
-    )
-    evidence_pack.add_argument("--maximum-blocking-findings", type=int, default=0)
-    trend_options = evidence_pack.add_argument_group("historical performance policy")
-    trend_options.add_argument(
-        "--performance-regression-percent", type=float, default=50.0
-    )
-    trend_options.add_argument("--maximum-total-seconds", type=float)
-    trend_options.add_argument(
-        "--tool-budget", action="append", default=[], metavar="TOOL=SECONDS"
-    )
-    evidence_pack.add_argument("--overwrite", action="store_true")
-
-    verify_evidence_pack_parser = subparsers.add_parser(
-        "verify-evidence-pack",
-        help="verify a closed evidence pack and its embedded audit archive",
-    )
-    verify_evidence_pack_parser.add_argument(
-        "pack", type=Path, metavar="PACK_DIRECTORY"
-    )
-    verify_evidence_pack_parser.add_argument("--report", type=Path)
-    verify_evidence_pack_parser.add_argument("--pack-sha256", default="")
-    verify_evidence_pack_parser.add_argument(
-        "--output", type=Path, metavar="RECEIPT_FILE"
-    )
-    verify_evidence_pack_parser.add_argument("--overwrite", action="store_true")
-
-    reachability = subparsers.add_parser(
-        "reachability",
-        help="build an offline Python entry-point and reachability graph",
-    )
-    reachability.add_argument("target", type=Path)
-    reachability.add_argument(
-        "--entry-point",
-        action="append",
-        default=[],
-        help="additional module:function root; repeat for multiple roots",
-    )
-    reachability.add_argument(
-        "--source-root",
-        action="append",
-        default=[],
-        help="target-relative Python source root; repeat for multiple roots",
-    )
-    reachability.add_argument(
-        "--minimum-island-loc",
-        type=int,
-        default=100,
-        help="minimum disconnected island size retained as a finding candidate",
-    )
-    reachability.add_argument(
-        "--no-framework-roots",
-        action="store_true",
-        help="disable conservative decorator-based framework root discovery",
-    )
-    reachability.add_argument(
-        "--coverage",
-        type=Path,
-        help="optional bounded coverage.py JSON evidence used for runtime corroboration",
-    )
-    reachability.add_argument(
-        "--pretty",
-        action="store_true",
-        help="indent JSON for direct operator inspection",
-    )
-
-    reachability_diff = subparsers.add_parser(
-        "reachability-diff",
-        help="compare two digest-bound reachability graphs",
-    )
-    reachability_diff.add_argument("baseline", type=Path)
-    reachability_diff.add_argument("current", type=Path)
-    reachability_diff.add_argument("--baseline-sha256", required=True)
-    reachability_diff.add_argument("--current-sha256", required=True)
-    reachability_diff.add_argument("--format", choices=("text", "json"), default="text")
-    reachability_diff.add_argument("--output", type=Path, metavar="FILE")
-    reachability_diff.add_argument("--overwrite", action="store_true")
-    advanced_diff = subparsers.add_parser(
-        "advanced-diff",
-        help="compare two digest-bound cross-evidence attack-surface analyses",
-    )
-    advanced_diff.add_argument("baseline", type=Path)
-    advanced_diff.add_argument("current", type=Path)
-    advanced_diff.add_argument("--baseline-sha256", required=True)
-    advanced_diff.add_argument("--current-sha256", required=True)
-    advanced_diff.add_argument(
-        "--format", choices=("text", "json", "markdown"), default="text"
-    )
-    advanced_diff.add_argument("--output", type=Path, metavar="FILE")
-    advanced_diff.add_argument("--overwrite", action="store_true")
-    return parser
+    Names that are already bound (including test doubles installed with
+    ``unittest.mock.patch``) are left untouched.
+    """
+    namespace = globals()
+    for name in _LAZY_IMPORTS:
+        if name not in namespace:
+            __getattr__(name)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _load_command_dependencies()
     if args.command == "list-tools":
         return _list_tools_command(args)
     try:
@@ -1070,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     handlers = {
         "recover-report": recovery_command,
         "schema": _schema_command,
@@ -1134,6 +434,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
 
 
 def _encrypt_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = encrypt_report(
         args.report,
         args.output,
@@ -1162,6 +463,7 @@ def _encrypt_report_command(args: argparse.Namespace) -> int:
 
 
 def _decrypt_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = decrypt_report(
         args.encrypted,
         args.output,
@@ -1173,6 +475,7 @@ def _decrypt_report_command(args: argparse.Namespace) -> int:
 
 
 def _retention_status_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     print(  # lgtm[py/clear-text-logging-sensitive-data] verified digests and timestamps only
         json.dumps(retention_status(args.report), indent=2, sort_keys=True)
     )
@@ -1180,6 +483,7 @@ def _retention_status_command(args: argparse.Namespace) -> int:
 
 
 def _purge_expired_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     print(
         json.dumps(
             purge_verified_report(
@@ -1193,6 +497,7 @@ def _purge_expired_report_command(args: argparse.Namespace) -> int:
 
 
 def _init_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or (target / "pysec.toml")
     requested = requested if requested.is_absolute() else target / requested
@@ -1222,6 +527,7 @@ def _init_command(args: argparse.Namespace) -> int:
 
 
 def _sign_artifacts_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     material = sign_release_artifacts(
         artifacts=args.artifacts,
         output=args.output,
@@ -1238,6 +544,7 @@ def _sign_artifacts_command(args: argparse.Namespace) -> int:
 
 
 def _prepare_signing_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     request = prepare_signing_request(args.report, args.artifacts)
     rendered = json.dumps(request, indent=2, sort_keys=True)
     _write_atomic_output(
@@ -1252,6 +559,7 @@ def _prepare_signing_command(args: argparse.Namespace) -> int:
 
 
 def _verify_signing_request_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-signing-request --overwrite requires --output")
     result = verify_signing_request(
@@ -1278,6 +586,7 @@ def _verify_signing_request_command(args: argparse.Namespace) -> int:
 
 
 def _reachability_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "reachability target")
     document = analyze_project(
         target,
@@ -1299,6 +608,7 @@ def _reachability_command(args: argparse.Namespace) -> int:
 
 
 def _reachability_diff_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("reachability-diff --overwrite requires --output")
     result = compare_reachability(
@@ -1331,6 +641,7 @@ def _reachability_diff_command(args: argparse.Namespace) -> int:
 
 
 def _advanced_diff_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("advanced-diff --overwrite requires --output")
     result = compare_advanced_analysis(
@@ -1364,6 +675,7 @@ def _advanced_diff_command(args: argparse.Namespace) -> int:
 
 
 def _doctor_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("doctor --overwrite requires --output")
     config = load_config(
@@ -1391,6 +703,7 @@ def _doctor_command(args: argparse.Namespace) -> int:
 
 
 def _provision_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("provision-plan --overwrite requires --output")
     config = load_config(
@@ -1418,6 +731,7 @@ def _provision_plan_command(args: argparse.Namespace) -> int:
 
 
 def _attest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     material = create_attestation(
         report=args.report,
         output=args.output,
@@ -1434,6 +748,7 @@ def _attest_command(args: argparse.Namespace) -> int:
 
 
 def _verify_attestation_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify --overwrite requires --output")
     if args.output and args.format != "json":
@@ -1465,6 +780,7 @@ def _verify_attestation_command(args: argparse.Namespace) -> int:
 
 
 def _verify_inspection_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-inspection --overwrite requires --output")
     if args.output and args.format != "json":
@@ -1497,6 +813,7 @@ def _verify_inspection_command(args: argparse.Namespace) -> int:
 
 
 def _inspect_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("inspect --overwrite requires --output")
     inspection = inspect_report(args.report, limit=args.limit)
@@ -1523,6 +840,7 @@ def _print_portable(value: str) -> None:
 
 
 def _scan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.network_isolated and args.diagnostic_without_isolation:
         raise ValueError(
             "--network-isolated and --diagnostic-without-isolation cannot be used together"
@@ -1563,6 +881,7 @@ def _scan_command(args: argparse.Namespace) -> int:
 
 def _schema_command(args: argparse.Namespace) -> int:
     """Render or safely publish one version-explicit installed schema."""
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("schema --overwrite requires --output")
     rendered_schema = read_bundled_schema(str(args.name))
@@ -1578,6 +897,7 @@ def _schema_command(args: argparse.Namespace) -> int:
 
 
 def _adapter_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("adapter-check --overwrite requires --output")
     document = assess_adapter_conformance()
@@ -1598,6 +918,7 @@ def _adapter_check_command(args: argparse.Namespace) -> int:
 
 
 def _qualify_bundle_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("qualify-bundle --overwrite requires --output")
     config = load_config(
@@ -1634,6 +955,7 @@ def _qualify_bundle_command(args: argparse.Namespace) -> int:
 
 
 def _verify_native_bundle_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-native-bundle --overwrite requires --output")
     document = verify_native_bundle(
@@ -1662,6 +984,7 @@ def _verify_native_bundle_command(args: argparse.Namespace) -> int:
 
 
 def _generate_ci_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or Path(".github/workflows/python-security.yml")
     requested = requested if requested.is_absolute() else target / requested
@@ -1695,6 +1018,7 @@ def _generate_ci_command(args: argparse.Namespace) -> int:
 
 
 def _generate_hooks_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     target = resolve_regular_directory(args.target, "project target")
     requested = args.output or Path(".pre-commit-config.yaml")
     requested = requested if requested.is_absolute() else target / requested
@@ -1722,6 +1046,7 @@ def _generate_hooks_command(args: argparse.Namespace) -> int:
 
 
 def _config_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("config-check --overwrite requires --output")
     document = advise_configuration(
@@ -1748,6 +1073,7 @@ def _config_check_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("benchmark --overwrite requires --output")
     result = evaluate_report_corpus(
@@ -1788,6 +1114,7 @@ def _benchmark_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_run_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     event_sink = (
         DurableJsonlSecurityEventSink(
             args.security_event_log,
@@ -1839,6 +1166,7 @@ def _benchmark_run_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     provider = load_external_signing_provider_profile(args.profile, args.profile_sha256)
     configured_time = any(
         os.environ.get(name, "").strip()
@@ -1869,6 +1197,7 @@ def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
 def _external_benchmark_signing_provider(
     args: argparse.Namespace,
 ) -> ExternalEd25519SigningProvider | None:
+    _load_command_dependencies()
     profile = args.receipt_signing_provider_profile
     profile_sha256 = args.receipt_signing_provider_profile_sha256
     executable = args.receipt_signing_provider_executable
@@ -1929,6 +1258,7 @@ def _external_benchmark_signing_provider(
 
 
 def _benchmark_runtime_probe_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if not args.authorize_execution:
         raise BenchmarkRuntimeError(
             "OCI runtime probing requires explicit --authorize-execution"
@@ -1951,12 +1281,14 @@ def _benchmark_runtime_probe_command(args: argparse.Namespace) -> int:
 
 
 def _benchmark_security_log_verify_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = verify_durable_security_event_log(args.log)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
 def _benchmark_prepare_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = compile_benchmark_manifest(args.request, args.workspace)
     rendered_manifest = json.dumps(result["manifest"], indent=2, sort_keys=True)
     _write_atomic_output(
@@ -1976,6 +1308,7 @@ def _benchmark_prepare_command(args: argparse.Namespace) -> int:
 
 
 def _assurance_catalog_export_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = export_assurance_catalog()
     rendered = json.dumps(result, indent=2, sort_keys=True)
     _write_atomic_output(
@@ -1989,6 +1322,7 @@ def _assurance_catalog_export_command(args: argparse.Namespace) -> int:
 
 
 def _standards_manifest_build_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     selected = set(args.standard) if args.standard else None
     result = build_standards_source_manifest(args.inventory, selected_ids=selected)
     rendered = json.dumps(result, indent=2, sort_keys=True)
@@ -2003,6 +1337,7 @@ def _standards_manifest_build_command(args: argparse.Namespace) -> int:
 
 
 def _standards_monitor_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     report = monitor_standard_sources(
         args.manifest,
         args.output,
@@ -2015,6 +1350,7 @@ def _standards_monitor_command(args: argparse.Namespace) -> int:
 
 
 def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     receipt = verify_standards_monitor_report(
         args.report,
         args.public_key,
@@ -2025,6 +1361,7 @@ def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
 
 
 def _release_check_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("release-check --overwrite requires --output")
     result = assess_release_readiness(
@@ -2076,6 +1413,7 @@ def _release_check_command(args: argparse.Namespace) -> int:
 
 
 def _evidence_draft_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("evidence-draft --overwrite requires --output")
     result = build_governance_evidence_draft(args.report)
@@ -2102,6 +1440,7 @@ def _evidence_draft_command(args: argparse.Namespace) -> int:
 
 
 def _promotion_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("promotion-plan --overwrite requires --output")
     result = build_promotion_plan(
@@ -2140,6 +1479,7 @@ def _promotion_plan_command(args: argparse.Namespace) -> int:
 
 
 def _closure_plan_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("closure-plan --overwrite requires --output")
     result = build_closure_plan(
@@ -2173,6 +1513,7 @@ def _closure_plan_command(args: argparse.Namespace) -> int:
 
 
 def _compare_builds_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("compare-builds --overwrite requires --output")
     result = compare_builds(
@@ -2211,6 +1552,7 @@ def _compare_builds_command(args: argparse.Namespace) -> int:
 
 
 def _normalize_sdist_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = normalize_sdist(
         args.source,
         args.output,
@@ -2228,6 +1570,7 @@ def _normalize_sdist_command(args: argparse.Namespace) -> int:
 
 
 def _baseline_candidate_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("baseline-candidate --overwrite requires --output")
     result = build_baseline_candidate(args.report)
@@ -2249,6 +1592,7 @@ def _baseline_candidate_command(args: argparse.Namespace) -> int:
 
 
 def _trend_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("trend --overwrite requires --output")
     result = build_operational_trend(
@@ -2282,6 +1626,7 @@ def _trend_command(args: argparse.Namespace) -> int:
 
 
 def _release_manifest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("release-manifest --overwrite requires --output")
     evidence = tuple(_parse_evidence_argument(value) for value in args.evidence)
@@ -2308,6 +1653,7 @@ def _release_manifest_command(args: argparse.Namespace) -> int:
 
 
 def _verify_release_manifest_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-release-manifest --overwrite requires --output")
     result = verify_release_evidence_manifest(
@@ -2337,6 +1683,7 @@ def _verify_release_manifest_command(args: argparse.Namespace) -> int:
 
 
 def _policy_simulation_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("policy-simulate --overwrite requires --output")
     result = simulate_policy(
@@ -2364,6 +1711,7 @@ def _policy_simulation_command(args: argparse.Namespace) -> int:
 
 
 def _finding_register_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("finding-register --overwrite requires --output")
     result = build_finding_register(
@@ -2387,6 +1735,7 @@ def _finding_register_command(args: argparse.Namespace) -> int:
 
 
 def _github_annotations_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("github-annotations --overwrite requires --output")
     result = build_github_annotations(
@@ -2410,6 +1759,7 @@ def _github_annotations_command(args: argparse.Namespace) -> int:
 
 
 def _audit_package_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = create_audit_package(
         args.report,
         args.output,
@@ -2425,6 +1775,7 @@ def _audit_package_command(args: argparse.Namespace) -> int:
 
 
 def _verify_audit_package_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-audit-package --overwrite requires --output")
     result = verify_audit_package(args.package, package_sha256=args.package_sha256)
@@ -2445,6 +1796,7 @@ def _verify_audit_package_command(args: argparse.Namespace) -> int:
 
 
 def _merge_coverage_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = merge_coverage_scenarios(
         tuple(_parse_evidence_argument(value) for value in args.scenario)
     )
@@ -2462,6 +1814,7 @@ def _merge_coverage_command(args: argparse.Namespace) -> int:
 
 
 def _portfolio_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("portfolio --overwrite requires --output")
     result = build_portfolio_dashboard(list(args.reports))
@@ -2483,6 +1836,7 @@ def _portfolio_command(args: argparse.Namespace) -> int:
 
 
 def _config_provenance_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("config-provenance --overwrite requires --output")
     result = build_config_provenance(
@@ -2510,6 +1864,7 @@ def _config_provenance_command(args: argparse.Namespace) -> int:
 
 
 def _audience_report_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("audience-report --overwrite requires --output")
     result = build_audience_report(
@@ -2540,6 +1895,7 @@ def _audience_report_command(args: argparse.Namespace) -> int:
 
 
 def _evidence_pack_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     result = create_evidence_pack(
         args.report,
         args.output,
@@ -2581,6 +1937,7 @@ def _evidence_pack_command(args: argparse.Namespace) -> int:
 
 
 def _verify_evidence_pack_command(args: argparse.Namespace) -> int:
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-evidence-pack --overwrite requires --output")
     result = verify_evidence_pack(
@@ -2646,6 +2003,7 @@ def _metric_text(value: object) -> str:
 
 def _verify_report_command(args: argparse.Namespace) -> int:
     """Verify a sealed report and optionally publish its portable receipt."""
+    _load_command_dependencies()
     if args.overwrite and not args.output:
         raise ValueError("verify-report --overwrite requires --output")
     if args.output and args.format != "json":
@@ -2674,6 +2032,7 @@ def _verify_report_command(args: argparse.Namespace) -> int:
 
 def _list_tools_command(args: argparse.Namespace) -> int:
     """Render the configured profile-to-tool inventory."""
+    _load_command_dependencies()
     profiles = (
         {args.profile: PROFILE_TOOLS[args.profile]} if args.profile else PROFILE_TOOLS
     )
@@ -2689,6 +2048,7 @@ def _emit_cli_error(
     args: argparse.Namespace,
     exc: ConfigurationError | OSError | TypeError | ValueError,
 ) -> None:
+    _load_command_dependencies()
     message = sanitize_terminal_text(str(exc))
     if getattr(exc, "__notes__", None):
         message += "\n" + sanitize_terminal_text("\n".join(exc.__notes__))
@@ -2717,6 +2077,7 @@ def _emit_cli_error(
 
 
 def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:
+    _load_command_dependencies()
     output = resolve_unlinked_path(output, "report output")
     _validate_output_scope(target, output)
     _validate_existing_output(output, overwrite)
@@ -2755,6 +2116,7 @@ def _validate_existing_output(output: Path, overwrite: bool) -> None:
 
 
 def _is_suite_report(marker: Path) -> bool:
+    _load_command_dependencies()
     if marker.name != "scan-manifest.json" or not marker.is_file():
         return False
     return is_complete_report(marker.parent)
@@ -2793,6 +2155,7 @@ def _write_atomic_output(
     forbidden_root: Path | None = None,
 ) -> Path:
     """Publish text atomically after link and replacement safety checks."""
+    _load_command_dependencies()
     requested = output.expanduser().absolute()
     anchor = Path(requested.anchor)
     destination = resolve_unlinked_path(
