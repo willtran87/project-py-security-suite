@@ -209,6 +209,9 @@ class NativeSuppressionFlagTests(_TemporaryRoot):
                 "semgrep", self.root
             ),
         )
+        suite = SemgrepAdapter(ToolConfig(rules_path=rules), 4096)
+        suite._suite_target = True
+        self.assertNotIn("--disable-nosem", suite.build_command("semgrep", self.root))
 
 
 class DetectSecretsAllowlistTests(_TemporaryRoot):
@@ -235,6 +238,8 @@ class DetectSecretsAllowlistTests(_TemporaryRoot):
             executable = Path(sys.prefix) / "bin" / "detect-secrets"
         if not executable.is_file():
             self.skipTest("detect-secrets is not installed in this environment")
+        # Synthetic token shape for the pinned-scanner check.
+        # pragma: allowlist nextline secret
         token = "ghp_" + "opTEIy39wHRhXPzb8LPRweTAUj4kT35wmqyS"
         (self.root / "c.py").write_text(
             f'token = "{token}"  # pragma: allowlist secret\n', encoding="utf-8"

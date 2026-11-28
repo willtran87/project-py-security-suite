@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import stat
 import unicodedata
@@ -185,6 +186,37 @@ def read_regular_file(
         if len(payload) > maximum_bytes:
             raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
         return resolved, payload
+
+
+def sha256_regular_file(
+    path: Path,
+    label: str,
+    *,
+    maximum_bytes: int,
+    boundary: Path | None = None,
+) -> tuple[Path, str, int]:
+    """Stream a bounded regular file's SHA-256 from one race-resistant handle.
+
+    Unlike :func:`read_regular_file` this never holds the payload in memory,
+    so large native runtime files (for example Semgrep's Linux engine) can be
+    bound by digest without a matching memory cost.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    with open_regular_file(
+        path,
+        label,
+        maximum_bytes=maximum_bytes,
+        boundary=boundary,
+    ) as (resolved, handle, observed_size):
+        while chunk := handle.read(min(1024 * 1024, observed_size - size + 1)):
+            size += len(chunk)
+            if size > maximum_bytes or size > observed_size:
+                raise ValueError(f"{label} changed while it was being read")
+            digest.update(chunk)
+        if size != observed_size:
+            raise ValueError(f"{label} changed while it was being read")
+        return resolved, digest.hexdigest(), size
 
 
 @contextmanager

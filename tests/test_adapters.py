@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from py_security_suite.adapters.bandit import BanditAdapter
 from py_security_suite.adapters.detect_secrets import (
@@ -198,6 +200,16 @@ class AdapterParserTests(unittest.TestCase):
         for name in ("site", "coverage.json", "junit.xml"):
             self.assertIn(str((self.target / name).resolve()), scan_arguments)
         self.assertFalse(is_suite_repository(self.target))
+        with mock.patch.dict(os.environ, {"PYSEC_SUITE_SELF_SCAN": "1"}):
+            # The operator declaration still requires a suite-shaped checkout.
+            self.assertFalse(is_suite_repository(self.target))
+            mounted = self.target / "mounted-suite"
+            adapter = mounted / "src" / "py_security_suite" / "adapters"
+            adapter.mkdir(parents=True)
+            (adapter / "detect_secrets.py").touch()
+            self.assertTrue(is_suite_repository(mounted))
+        with mock.patch.dict(os.environ, {"PYSEC_SUITE_SELF_SCAN": "0"}):
+            self.assertFalse(is_suite_repository(mounted))
         suite_root = Path(__file__).resolve().parents[1]
         self.assertTrue(is_suite_repository(suite_root))
         suite_command = DetectSecretsAdapter(ToolConfig(), 4096).build_command(

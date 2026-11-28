@@ -19,6 +19,7 @@ from .base import AdapterResult, ScannerAdapter
 from .coverage import native_coverage, reconcile_coverage
 from .staging import maintained_files, python_scan_tree
 from .common import map_confidence, map_severity, string_list
+from .detect_secrets import is_suite_repository
 
 
 SEMGREP_JOBS = 2
@@ -27,8 +28,11 @@ SEMGREP_JOBS = 2
 class SemgrepAdapter(ScannerAdapter):
     name = "semgrep"
     partial_exit_codes = frozenset({3})
+    # Decided on the real target in run(); build_command only sees the mirror.
+    _suite_target = False
 
     def run(self, target: Path) -> AdapterResult:
+        self._suite_target = is_suite_repository(target)
         with python_scan_tree(target) as mirror:
             return super().run(mirror)
 
@@ -79,8 +83,9 @@ class SemgrepAdapter(ScannerAdapter):
             "--disable-version-check",
             "--strict",
             "--no-git-ignore",
-            # Target-controlled "nosem" comments must not suppress findings.
-            "--disable-nosem",
+            # Target-controlled "nosem" comments must not suppress findings;
+            # only the suite's own reviewed checkout keeps its inline pragmas.
+            *(() if self._suite_target else ("--disable-nosem",)),
             f"--jobs={SEMGREP_JOBS}",
             "--exclude",
             ".artifacts",

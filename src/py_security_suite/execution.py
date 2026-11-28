@@ -27,7 +27,7 @@ from .platform_runtime import (
 )
 from .process_memory import process_tree_resident_bytes as _process_tree_resident_bytes
 from .scan_control import ScanInterrupted, StopCause, stop_cause, stop_reason
-from .path_safety import read_regular_file
+from .path_safety import read_regular_file, sha256_regular_file
 from .governed_assets import (
     sha256_file as sha256_file,
     governed_asset_sha256 as governed_asset_sha256,
@@ -197,20 +197,20 @@ def python_runtime_closure_sha256(
             located = Path(str(current.locate_file(relative)))
             if not located.is_file():
                 continue
-            _, payload = read_regular_file(
+            _, digest, size = sha256_regular_file(
                 located,
                 f"{name} runtime file",
-                maximum_bytes=256 * 1024 * 1024,
+                maximum_bytes=1024 * 1024 * 1024,
             )
-            total_bytes += len(payload)
+            total_bytes += size
             if total_bytes > 4 * 1024 * 1024 * 1024:
                 raise ValueError("Python scanner runtime closure exceeds 4 GiB")
             records.append(
                 {
                     "distribution": name,
                     "path": str(relative).replace("\\", "/"),
-                    "sha256": hashlib.sha256(payload).hexdigest(),
-                    "size": len(payload),
+                    "sha256": digest,
+                    "size": size,
                 }
             )
             if _is_native_binary(located):

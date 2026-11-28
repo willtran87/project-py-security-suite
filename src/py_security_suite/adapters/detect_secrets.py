@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -67,15 +68,19 @@ _SUITE_EXCLUDES = (
 )
 
 
+# Set by the operator (scripts/run-self-scan.ps1) when the suite scans its own
+# checkout from a container, where the installed suite and the mounted target
+# live at different paths. Target code never runs, so a target cannot set it.
+SELF_SCAN_ENVIRONMENT = "PYSEC_SUITE_SELF_SCAN"
+
+
 def is_suite_repository(target: Path) -> bool:
     """Return whether ``target`` is this suite's own source checkout."""
     root = target.resolve()
-    return (
-        root == _SUITE_REPOSITORY
-        and (root / "src" / "py_security_suite" / "adapters" / "detect_secrets.py")
-        .resolve()
-        .is_file()
-    )
+    operator_declared = os.environ.get(SELF_SCAN_ENVIRONMENT) == "1"
+    return (root == _SUITE_REPOSITORY or operator_declared) and (
+        root / "src" / "py_security_suite" / "adapters" / "detect_secrets.py"
+    ).resolve().is_file()
 
 
 class DetectSecretsAdapter(ScannerAdapter):

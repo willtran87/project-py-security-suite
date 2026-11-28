@@ -50,6 +50,14 @@ versioned heading when a release is tagged.
 
 ### Security
 
+- **Containerized self-scan trust.** `scripts/run-self-scan.ps1` now sets
+  `PYSEC_SUITE_SELF_SCAN=1`, so the suite's governed detect-secrets exclusions
+  and reviewed inline `nosemgrep` pragmas still apply when the installed suite
+  and the mounted checkout live at different paths. Third-party targets keep
+  fail-closed suppression handling.
+- Python scanner runtime closures now stream each file's SHA-256 under a 1 GiB
+  per-file bound. Semgrep's 273 MB Linux engine exceeded the old 256 MiB
+  in-memory cap, which broke native Semgrep qualification.
 - **SARIF output contract change.** `results.sarif` rule descriptors are now
   keyed by scanner rule and severity (`<tool>/<rule>/<severity>`), so GitHub
   shows each alert at its own security severity instead of the first finding's.

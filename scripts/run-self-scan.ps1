@@ -46,6 +46,7 @@ docker run `
     --mount "type=bind,source=$artifactRoot,target=/out" `
     @runtimeIdentityArguments `
     --env PYTHONDONTWRITEBYTECODE=1 `
+    --env PYSEC_SUITE_SELF_SCAN=1 `
     $Image `
     scan /workspace `
     --config /workspace/security/self-scan.toml `
