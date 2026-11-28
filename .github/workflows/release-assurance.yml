@@ -16,7 +16,7 @@ concurrency:
 jobs:
   detection-accuracy:
     name: Required source-security accuracy for release
-    uses: ./.github/workflows/detection-accuracy.yml
+    uses: ./.github/workflows/detection-accuracy.yml # zizmor: ignore[self-repository] local reusable workflow pinned to this commit
     with:
       require_accuracy: true
     permissions:
@@ -24,7 +24,7 @@ jobs:
 
   deep-assurance:
     name: Fresh deep assurance for release source
-    uses: ./.github/workflows/deep-assurance.yml
+    uses: ./.github/workflows/deep-assurance.yml # zizmor: ignore[self-repository] local reusable workflow pinned to this commit
     permissions:
       contents: read
       id-token: write # Exchange the release workflow identity for provenance signing.
@@ -112,7 +112,7 @@ jobs:
   release-wheel-accuracy:
     name: Required accuracy of the exact independently built wheel
     needs: independent-build
-    uses: ./.github/workflows/detection-accuracy.yml
+    uses: ./.github/workflows/detection-accuracy.yml # zizmor: ignore[self-repository] local reusable workflow pinned to this commit
     with:
       require_accuracy: true
       wheel_artifact: release-builder-a

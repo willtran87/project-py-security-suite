@@ -68,7 +68,7 @@ jobs:
 
   external-benchmark:
     name: Pinned external Python detection benchmark
-    uses: ./.github/workflows/detection-accuracy.yml
+    uses: ./.github/workflows/detection-accuracy.yml # zizmor: ignore[self-repository] local reusable workflow pinned to this commit
     with:
       require_accuracy: ${{ inputs.require_detection_accuracy || false }}
     permissions:
@@ -363,7 +363,7 @@ jobs:
     env:
       HOME: /root
     container:
-      image: mcr.microsoft.com/playwright/python:v1.62.0-noble@sha256:51d31fdfacb0cff99a1a724152e34ae408d2bd4e7da310ff157450f49261cc59
+      image: mcr.microsoft.com/playwright/python:v1.65.2-noble@sha256:38dd67fc654b56b3cba611e4c8eb71cd33750e1cd29eea2a5dc00b484817a75f
     timeout-minutes: 20
     steps:
       - name: Check out source
