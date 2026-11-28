@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .reports import recover_reports
-
 
 def add_recovery_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -33,6 +31,9 @@ def add_recovery_commands(
 
 
 def recovery_command(args: argparse.Namespace) -> int:
+    # Imported on use so building the CLI parser does not load the renderers.
+    from .reports import recover_reports
+
     recover_reports(args.checkpoint, args.output)
     print(f"Recovered report: {args.output}")
     return 0

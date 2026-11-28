@@ -9,7 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 from collections.abc import Callable
 
-from .config import PROFILE_TOOLS
+from .config_profiles import PROFILE_TOOLS
 from .scan_control import ScanProgress
 
 

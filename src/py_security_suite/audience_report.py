@@ -9,8 +9,8 @@ from typing import Any
 from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
+from .audiences import AUDIENCES as AUDIENCES
 
-AUDIENCES = ("executive", "developer", "security", "release_engineering", "auditor")
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 
 

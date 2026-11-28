@@ -21,6 +21,9 @@ from .benchmark_signing import LocalEd25519SigningProvider, ReceiptSigningProvid
 from .atomic_file import atomic_write_bytes
 from .path_safety import read_regular_file, resolve_unlinked_path
 from .strict_json import canonical_bytes, loads as strict_loads
+from .benchmark_replay_genesis import (
+    BENCHMARK_REPLAY_GENESIS_SHA256 as BENCHMARK_REPLAY_GENESIS_SHA256,
+)
 
 
 _MAX_POLICY_BYTES = 2 * 1024 * 1024
@@ -42,9 +45,6 @@ _ROLES = {
     "provenance-builder",
     "security-event-anchor",
 }
-BENCHMARK_REPLAY_GENESIS_SHA256 = hashlib.sha256(
-    b"pysec-benchmark-replay-genesis-v1"
-).hexdigest()
 
 
 class BenchmarkAssuranceError(ValueError):

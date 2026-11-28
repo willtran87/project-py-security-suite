@@ -468,11 +468,11 @@ digest-bound model contract, and returns explicit production/release gate errors
 This removes duplicated fallback orchestration while preserving source-only
 analysis when external scanner execution is unavailable.
 
-<!-- pysec-architecture-metrics files=22 function_lengths=23 decision_budgets=14 -->
+<!-- pysec-architecture-metrics files=22 function_lengths=22 decision_budgets=14 -->
 The continuous gate currently protects 58 commands, 469 positional/option
 contracts, 164 immutable versioned schema contracts, three console-script
 targets, and two Python callable signatures; enforces concentration
-ceilings across 22 files, 23 function-length budgets, and 14 decision-node
+ceilings across 22 files, 22 function-length budgets, and 14 decision-node
 budgets; and repeats
 five representative workloads five times plus one isolated full-repository
 analysis pipeline. The workload suite covers 10,000-case

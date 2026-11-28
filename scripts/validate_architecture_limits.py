@@ -13,23 +13,25 @@ _MAXIMUM_UNTRACKED_FUNCTION_DECISIONS = 65
 # function decision budgets and the untracked-code limits are unchanged.
 _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_assurance.py": 5_420,
-    "src/py_security_suite/industry_standards_catalog.py": 6_256,
-    "src/py_security_suite/industry_benchmark_catalog.py": 2_409,
-    "src/py_security_suite/industry_profile_catalog.py": 6_896,
-    "src/py_security_suite/industry_interoperability_sector_catalog.py": 413,
-    "src/py_security_suite/industry_maturity_product_catalog.py": 630,
-    "src/py_security_suite/industry_emerging_assurance_catalog.py": 1_188,
+    # Catalog data now lives in validated package JSON (catalogs/*.json); the
+    # modules only bind names, so these budgets keep data from creeping back.
+    "src/py_security_suite/industry_standards_catalog.py": 24,
+    "src/py_security_suite/industry_benchmark_catalog.py": 33,
+    "src/py_security_suite/industry_profile_catalog.py": 24,
+    "src/py_security_suite/industry_interoperability_sector_catalog.py": 34,
+    "src/py_security_suite/industry_maturity_product_catalog.py": 32,
+    "src/py_security_suite/industry_emerging_assurance_catalog.py": 37,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
-    "src/py_security_suite/risk_paths.py": 7_265,
-    "src/py_security_suite/reports.py": 7_498,
+    "src/py_security_suite/risk_paths.py": 1_196,
+    "src/py_security_suite/reports.py": 380,
     "src/py_security_suite/data_exposure.py": 3_778,
     "src/py_security_suite/evidence_ingest.py": 2_511,
     "src/py_security_suite/artifact_validation.py": 2_405,
     "src/py_security_suite/benchmark_execution.py": 2_432,
     "src/py_security_suite/benchmark_adapters.py": 3_130,
-    "src/py_security_suite/cli.py": 2_877,
+    "src/py_security_suite/cli.py": 2_240,
     "src/py_security_suite/closure_plan.py": 3_043,
-    "src/py_security_suite/config.py": 2_532,
+    "src/py_security_suite/config.py": 2_176,
     "src/py_security_suite/execution.py": 1_148,
     "src/py_security_suite/reachability.py": 2_295,
     "src/py_security_suite/cli_benchmark_arguments.py": 209,
@@ -44,7 +46,6 @@ _FUNCTION_LINE_LIMITS = {
     ): 490,
     ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 523,
     ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 421,
-    ("src/py_security_suite/cli.py", "build_parser"): 917,
     ("src/py_security_suite/config.py", "_default_mapping"): 627,
     (
         "src/py_security_suite/cli_benchmark_arguments.py",
@@ -55,7 +56,10 @@ _FUNCTION_LINE_LIMITS = {
         "add_release_check_command",
     ): 64,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 591,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 68,
+    (
+        "src/py_security_suite/report_risk_path_summary.py",
+        "_render_risk_path_summary",
+    ): 68,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 275,
     (
         "src/py_security_suite/semantic_coverage.py",
@@ -71,12 +75,12 @@ _FUNCTION_LINE_LIMITS = {
     ): 352,
     ("src/py_security_suite/industry_assurance.py", "_oscal_documents"): 351,
     ("src/py_security_suite/code_health.py", "analyze_code_health"): 321,
-    ("src/py_security_suite/reports.py", "render_assurance_case"): 316,
+    ("src/py_security_suite/report_assurance_case.py", "render_assurance_case"): 316,
     (
         "src/py_security_suite/benchmark_evidence.py",
         "verify_benchmark_evidence_documents",
     ): 314,
-    ("src/py_security_suite/risk_paths.py", "_owner_work_queues"): 312,
+    ("src/py_security_suite/risk_path_owner_queues.py", "_owner_work_queues"): 312,
     (
         "src/py_security_suite/industry_assurance.py",
         "_assurance_case_assessment",
@@ -87,7 +91,10 @@ _FUNCTION_LINE_LIMITS = {
 _FUNCTION_DECISION_LIMITS = {
     ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 31,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 135,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 16,
+    (
+        "src/py_security_suite/report_risk_path_summary.py",
+        "_render_risk_path_summary",
+    ): 16,
     ("src/py_security_suite/benchmark_execution.py", "execute_benchmark_manifest"): 58,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 45,
     (
@@ -100,9 +107,12 @@ _FUNCTION_DECISION_LIMITS = {
         "_assurance_case_assessment",
     ): 85,
     ("src/py_security_suite/data_exposure.py", "_sdk_dependency_contexts"): 83,
-    ("src/py_security_suite/reports.py", "_markdown_risk_path_context"): 77,
+    (
+        "src/py_security_suite/report_markdown_findings.py",
+        "_markdown_risk_path_context",
+    ): 77,
     ("src/py_security_suite/data_exposure.py", "apply_data_exposure_fusion"): 80,
-    ("src/py_security_suite/reports.py", "_html_risk_path_context"): 74,
+    ("src/py_security_suite/report_html.py", "_html_risk_path_context"): 74,
     ("src/py_security_suite/industry_assurance.py", "_lifecycle_trace_graph"): 75,
     ("src/py_security_suite/domain_assurance.py", "_domain_signals"): 86,
 }

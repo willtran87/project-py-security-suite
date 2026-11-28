@@ -20,6 +20,7 @@ recursive-include security *.json *.toml
 recursive-include src/py_security_suite py.typed
 recursive-include src/py_security_suite/rules *.ini *.json *.psd1 *.toml *.txt *.yaml *.yml
 recursive-include src/py_security_suite/schemas *.json
+recursive-include src/py_security_suite/catalogs *.json
 # The test suite depends on repository-only fixtures, workflows and model
 # metadata, so it is deliberately not shipped in the sdist. Run tests from a
 # repository checkout instead.
